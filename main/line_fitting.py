@@ -87,12 +87,11 @@ def fit_triple_voigt(spec_data, pos1, pos2, pos3, gauss_sigma):
     #init = model.guess(spec_data['MS Fraction'], x=spec_data['Wavenumber'])
     # now fit
     
-    normed_ms = spec_data['MS Fraction']/50
+    normed_ms = spec_data['MS Fraction']/100
     epsilon = 0.05
     weights = 1/np.sqrt((epsilon + normed_ms)*(1-normed_ms)) ##
     return model.fit(spec_data['MS Fraction'], pars, x=spec_data['Wavenumber'], weights=weights)#, method='emcee')
     #print(fit.fit_report())
-
 
 
 def fit_two_gaussians(count, pos):#df
