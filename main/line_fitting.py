@@ -48,7 +48,12 @@ def fit_separate_voigts(spec_data, pos1, pos2, pos3, gauss_sigma, fit_region_wid
                                 max=np.max(spec_region['Wavenumber']))
         # fix the Gaussian sigma
         v_pars['v{0}_sigma'.format(index+1)].set(value=gauss_sigma, vary=False)
-        v_fit = v.fit(spec_region['MS Fraction'], v_pars, x=spec_region["Wavenumber"],)
+
+        normed_ms = spec_region['MS Fraction']/100
+        epsilon = 0.05 # a smoothing parameter in case a 0.0 value is encountered
+        weights = 1/((normed_ms + epsilon) * (1-normed_ms))
+        v_fit = v.fit(spec_region['MS Fraction'], v_pars, x=spec_region["Wavenumber"],
+                            weights=weights)
                       #method='ampgo')
         fit_results.append(v_fit)
     return fit_results
@@ -82,7 +87,10 @@ def fit_triple_voigt(spec_data, pos1, pos2, pos3, gauss_sigma):
     #init = model.guess(spec_data['MS Fraction'], x=spec_data['Wavenumber'])
     # now fit
     
-    return model.fit(spec_data['MS Fraction'], pars, x=spec_data['Wavenumber'])#, method='emcee')
+    normed_ms = spec_data['MS Fraction']/50
+    epsilon = 0.05
+    weights = 1/np.sqrt((epsilon + normed_ms)*(1-normed_ms)) ##
+    return model.fit(spec_data['MS Fraction'], pars, x=spec_data['Wavenumber'], weights=weights)#, method='emcee')
     #print(fit.fit_report())
 
 
