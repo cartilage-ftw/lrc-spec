@@ -185,6 +185,84 @@ feb4_files = ['2024-02-04-20-04-01.csv'
 	,'2024-02-04-20-38-47.csv']
 
 
+feb8_positions = [30.50, 30.70, 30.90, 31.10, 31.30, 31.50,
+                  31.63, 31.75, 31.88, 32.00, 32.25, 32.50,
+                   
+                    30.50, 30.75, 31.00, 
+                    
+                  30.25, 30.00, 29.75, 29.50, 29.25, 29.00,
+                  28.75, 28.50, 28.25, 28.00, 27.75, 27.50, 
+                  27.25, 27.00, 26.75, 26.50, 26.25, 26.00,
+                  25.75, 25.50, 25.25, 25.00, 24.75, 24.50,
+                  24.25, 24.00, 23.75, 23.50, 23.25, 23.00, 22.75, 
+                  22.50, 22.25, 22.00, 21.75, 21.50, 21.25]
+
+print('Feb 8 measurements', len(feb8_positions), 'positions')
+feb8_files = ['2024-02-08-17-13-47.csv'
+	,'2024-02-08-17-16-00.csv'
+	,'2024-02-08-17-17-01.csv'
+	,'2024-02-08-17-18-29.csv'
+	,'2024-02-08-17-19-30.csv'
+	,'2024-02-08-17-20-34.csv'
+	,'2024-02-08-17-24-57.csv'
+	,'2024-02-08-17-26-01.csv'
+	,'2024-02-08-17-26-59.csv'
+	,'2024-02-08-17-30-03.csv'
+	,'2024-02-08-17-31-37.csv'
+	,'2024-02-08-17-34-24.csv'
+	,'2024-02-08-17-39-34.csv'
+	,'2024-02-08-17-41-10.csv'
+	,'2024-02-08-17-42-24.csv'
+	,'2024-02-08-17-44-32.csv'
+	,'2024-02-08-17-46-13.csv'
+	,'2024-02-08-17-49-06.csv'
+	,'2024-02-08-17-50-23.csv'
+	,'2024-02-08-17-51-23.csv'
+	,'2024-02-08-17-52-53.csv'
+	,'2024-02-08-17-53-59.csv'
+	,'2024-02-08-17-55-25.csv'
+	,'2024-02-08-17-58-50.csv'
+	,'2024-02-08-18-00-26.csv'
+	,'2024-02-08-18-30-11.csv'
+	,'2024-02-08-18-32-54.csv'
+	,'2024-02-08-18-33-59.csv'
+	,'2024-02-08-18-35-12.csv'
+	,'2024-02-08-18-36-21.csv'
+	,'2024-02-08-18-37-47.csv'
+	,'2024-02-08-18-42-45.csv'
+	,'2024-02-08-18-43-44.csv'
+	,'2024-02-08-18-45-06.csv'
+	,'2024-02-08-18-46-04.csv'
+	,'2024-02-08-18-47-13.csv'
+	,'2024-02-08-18-48-11.csv'
+	,'2024-02-08-18-49-42.csv'
+	,'2024-02-08-18-51-02.csv'
+	,'2024-02-08-18-52-15.csv'
+	,'2024-02-08-18-53-28.csv'
+	,'2024-02-08-18-54-37.csv'
+	,'2024-02-08-18-55-47.csv'
+	,'2024-02-08-18-57-13.csv'
+	,'2024-02-08-18-59-15.csv'
+	,'2024-02-08-19-00-19.csv'
+	,'2024-02-08-19-01-21.csv'
+	,'2024-02-08-19-02-33.csv'
+	,'2024-02-08-19-03-31.csv'
+	,'2024-02-08-19-05-00.csv'
+	,'2024-02-08-19-06-14.csv'
+	,'2024-02-08-19-07-49.csv']
+
+print(len(feb8_files), 'files')
+feb8_counts = []
+
+for file_name in feb8_files:
+    try:
+        df = pd.read_csv('../data/bandwidth/08-02-2024/' + file_name, sep=',')
+        feb8_counts.append(len(df))
+    except:
+        print('Error reading', file_name, ': Potentially empty, or not found')
+        feb8_counts.append(0)
+
+
 feb4_counts = []
 for file_name in feb4_files:
     try:
@@ -219,12 +297,14 @@ def fit_and_plot(df, region, ax):
     ax.axvline(x=line_fit.params['center'].value, ymin=0, ymax=1, lw=0.5, c='gray', ls='--')
 
 
-fig, ax = plt.subplots(figsize=(8,6))
+fig, axes = plt.subplots(2, 1, figsize=(8,9), sharex=True)
 
+ax = axes[0]
 for date, meas_df in vert_pos_df.groupby('Date'):
     ax.scatter(meas_df['Position'], meas_df['Counts'], label=date)
 
-ax.legend()
+axes[1].scatter(feb8_positions, feb8_counts, c='green', label='Feb 8')
+
 fit_and_plot(vert_pos_df, [21.4, 22.1], ax)
 fit_and_plot(vert_pos_df, [22.3, 23.14], ax)
 fit_and_plot(vert_pos_df, [23.2, 24.3], ax)
@@ -261,9 +341,26 @@ for pos, file_name in vert_pos_dict.items():
 axes[0].plot(positions, counts, marker='o')
 axes[1].plot(vert_positions, counts_vert, marker='o')'''
 # width of first ring is FWHM ~= 0.415 mm
-ax.set_xlabel('Vertical Height [mm]', fontsize=13)
-ax.set_ylabel('Counts', fontsize=13)
-plt.title('Fabry-Perot Pattern')
+
+feb8_df = pd.DataFrame(data={'Position': feb8_positions, 'Counts':feb8_counts})
+
+print("--------- Fitting to Feb 8 data -----------")
+fit_and_plot(feb8_df, [21.1, 21.84], axes[1])
+fit_and_plot(feb8_df, [21.84, 22.89], axes[1])
+fit_and_plot(feb8_df, [22.82, 24.10], axes[1])
+fit_and_plot(feb8_df, [24.12, 25.87], axes[1])
+
+fit_and_plot(feb8_df, [28.46, 29.87], axes[1])
+fit_and_plot(feb8_df, [30.2, 30.91], axes[1])
+fit_and_plot(feb8_df, [31.2, 32.0], axes[1])
+
+for _ax in axes:
+    _ax.axhline(y=0, xmin=0, xmax=1, ls='--', c='dimgray', zorder=-1, lw=0.5)
+    _ax.legend()
+
+axes[1].set_xlabel('Vertical Height [mm]', fontsize=13)
+axes[0].set_ylabel('Counts', fontsize=13)
+axes[0].set_title('Fabry-Perot Pattern')
 plt.tight_layout()
 plt.savefig('fabry_perot_new.png', dpi=300)
 plt.show()
