@@ -1,5 +1,4 @@
 matplotlib
 lmfit
 scipy
-plotly
-pywt
+PyWavelets
