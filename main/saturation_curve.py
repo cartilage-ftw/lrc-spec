@@ -111,21 +111,27 @@ def make_saturation_curve(files_and_filters, root_dir, per_pulse_energy, pulse_e
     plt.show()
 
 
-energy_20Nov = pd.read_csv('../data/power/20.11.2023_56A_8kHz_no_od.csv', sep='\t', skiprows=17)
-avg_energy_20nov = np.average(energy_20Nov['Measurement'])
-std_energy_20nov = np.std(energy_20Nov['Measurement'])
-energy_21Nov = pd.read_csv('../data/power/21.11.2023_56A_8kHz_2.csv', sep='\t', skiprows=17)
-avg_energy_21nov = np.average(energy_21Nov['Measurement'])
-std_energy_21nov = np.std(energy_21Nov['Measurement'])
-
-energy_scaling_8kHz = 2.638/0.333
-
-saturation_dir = '../data/saturation/'
-saturation_dat = ['saturation_data_8kHz_peak1_nov21', 'saturation_data_8kHz_peak2_nov21',
-                  'saturation_data_8kHz_peak3_nov21']
 
 
 if __name__ == '__main__':
+    
+    energy_20Nov = pd.read_csv('../data/power/20.11.2023_56A_8kHz_no_od.csv', sep='\t', skiprows=17)
+    avg_energy_20nov = np.average(energy_20Nov['Measurement'])
+    std_energy_20nov = np.std(energy_20Nov['Measurement'])
+    energy_21Nov = pd.read_csv('../data/power/21.11.2023_56A_8kHz_2.csv', sep='\t', skiprows=17)
+    avg_energy_21nov = np.average(energy_21Nov['Measurement'])
+    std_energy_21nov = np.std(energy_21Nov['Measurement'])
+
+    energy_scaling_8kHz = 2.638/0.333
+
+    saturation_dir = '../data/saturation/'
+    saturation_dat = ['saturation_data_8kHz_peak1_nov21', 'saturation_data_8kHz_peak2_nov21',
+                    'saturation_data_8kHz_peak3_nov21']
+    
+    make_saturation_curve(file_filter_dict_8kHz_21, root_dir='../data/lrc/21-11-2023/',
+                            per_pulse_energy=avg_energy_21nov*energy_scaling_8kHz,
+                            pulse_energy_std=std_energy_21nov*energy_scaling_8kHz)
+
     '''fig, axes = plt.subplots(3, 1, figsize=(8,6))
     for i in range(len(saturation_dat)):
         df = pd.read_csv(saturation_dir + saturation_dat[i] + '.csv')
@@ -140,7 +146,3 @@ if __name__ == '__main__':
     '''make_saturation_curve(file_filter_dict_8kHz, root_dir='../data/lrc/20-11-2023/',
                             per_pulse_energy=avg_energy_20nov*energy_scaling_8kHz,
                             pulse_energy_std=std_energy_20nov*energy_scaling_8kHz)'''
-
-    make_saturation_curve(file_filter_dict_8kHz_21, root_dir='../data/lrc/21-11-2023/',
-                            per_pulse_energy=avg_energy_21nov*energy_scaling_8kHz,
-                            pulse_energy_std=std_energy_21nov*energy_scaling_8kHz)
