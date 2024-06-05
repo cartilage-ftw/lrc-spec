@@ -51,14 +51,16 @@ def set_wavenum_steps(steps):
 
 def display_atd(atd, wavenum_req, wavenum_obs='#TODO'):
     step_data = atd[atd['wavenum_req'] == wavenum_req]
+    median_wavenum = np.median(step_data['wavenum_obs'])
     weights, bin_edges = np.histogram(step_data['cycle_time']*1E6, bins='fd')
-    fig_atd = figure(title=f'Arrival Time Distribution at {wavenum_req}',
-                     x_axis_label='Arrival Time [μs]',
+
+    global fig_atd
+    fig_atd = figure(x_axis_label='Arrival Time [μs]',
                      y_axis_label='Frequency',
                      x_range=(100, 700),
                      y_range=(0, 1.05*np.max(weights)))
     fig_atd.quad(top=weights, bottom=0, left=bin_edges[:-1], right=bin_edges[1:],
-                 fill_color='skyblue', line_color='white')
+                 fill_color='skyblue', line_color='white', legend_label=f'{median_wavenum:.2f} cm-1')
     st.bokeh_chart(fig_atd, use_container_width=True)
 
     #st.write("Did it not work? I got something for you")
@@ -98,6 +100,7 @@ if uploaded_file is not None:
             buncher_delay = st.number_input('Buncher Delay (in seconds)')
             ms_cut_pos = st.number_input('GS Cutoff [ms]', value=0.295, step=1E-3, format='%.3f')
 
+            global atd
             atd = load_atd()
             display_wavenum = st.select_slider("Select wavenumber step to display",
                                         options=set(atd['wavenum_req']))
@@ -112,6 +115,7 @@ if uploaded_file is not None:
         except Exception as e:
             st.write(f'Error plotting the ATD from {uploaded_file.name}!\n' +
                   'Please check if all wavenumbers are not garbage (e.g. -33333)')
+            st.write(atd)
 
 st.write("## Line Fitting")
 
