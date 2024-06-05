@@ -7,6 +7,8 @@ import visual_utils
 import line_fitting
 import saturation_curve
 
+from bokeh.plotting import figure
+
 lrc_logo_url = 'https://www.lrc-project.eu/' + \
                 r'Webpage%20of%20the%20European%20LRC%20project-Dateien/LRC-color-300x77.png'
 
@@ -47,25 +49,32 @@ def set_wavenum_steps(steps):
     wavenum_tuner.steps = steps
 
 
-def display_atd(file, bunching_delay, bunching_freq):
-    #st.write('Loading file..')
-    print('This thing is not trying', bunching_freq)
-    if int(bunching_freq) != 0:
-        atd_data = io_utils.read_lrc_timeseries(file,
-                        buncher_delay=bunching_delay, buncher_cycle_dur=1/float(bunching_freq))
-        #print('Finished loading ATD data')
-        set_wavenum_steps(np.unique(atd_data['wavenum_req']))
-        
-    else:
-        st.write('Please provide a non-zero bunching frequency.')
-        print('Why is it not finding a non-zero value?')
-    #pass
+def display_atd(atd, wavenum_req, wavenum_obs='#TODO'):
+    step_data = atd[atd['wavenum_req'] == wavenum_req]
+    weights, bin_edges = np.histogram(step_data['cycle_time']*1E6, bins='fd')
+    fig_atd = figure(title=f'Arrival Time Distribution at {wavenum_req}',
+                     x_axis_label='Arrival Time [μs]',
+                     y_axis_label='Frequency',
+                     x_range=(100, 700),
+                     y_range=(0, 1.05*np.max(weights)))
+    fig_atd.quad(top=weights, bottom=0, left=bin_edges[:-1], right=bin_edges[1:],
+                 fill_color='skyblue', line_color='white')
+    st.bokeh_chart(fig_atd, use_container_width=True)
+
+    #st.write("Did it not work? I got something for you")
+    #fix_everything()
+
 
 st.write("""In some measurements you may have kept the laser off,
           in which case the wavemeter read out a garbage value such as -33333""")
 
 garbage_wave_flag = st.radio("""Discard recorded hits with garbage wavelength readouts? (e.g. -33,333)""",
                             options=['Yes', 'No, keep'])
+
+
+def load_atd():
+    return io_utils.read_lrc_timeseries(uploaded_file, buncher_delay, 1/bunching_freq,
+                         discard_garbage=(garbage_wave_flag == 'Yes'))
 
 def load_data_button():
     #display_atd(uploaded_file, buncher_delay, bunching_freq)
@@ -76,7 +85,7 @@ def load_data_button():
                            file_name=uploaded_file.name[:-4] + '_spectrum.csv')
 
 if uploaded_file is not None:
-    if file_type == 'Spectrum':
+    if 'spectrum' in file_type.lower():
         try:
             plot_spectrum(uploaded_file)
         except Exception as e:
@@ -84,11 +93,19 @@ if uploaded_file is not None:
                   "\nPlease check if you're using the correct file/option")
     else:
         try:
-            buncher_delay = st.number_input('Buncher Delay (in seconds)')
+            st.write("### Arrival Time Distribution")
             bunching_freq = st.number_input('Bunching Freq (in Hz)', value=100)
-            filter1 = st.number_input('OD 1', value=0.)
-            filter2 = st.number_input('OD 2', value=0.)
-            ms_cut_pos = st.number_input('MS Cut', value=0.295, step=1E-3, format='%.3f')
+            buncher_delay = st.number_input('Buncher Delay (in seconds)')
+            ms_cut_pos = st.number_input('GS Cutoff [ms]', value=0.295, step=1E-3, format='%.3f')
+
+            atd = load_atd()
+            display_wavenum = st.select_slider("Select wavenumber step to display",
+                                        options=set(atd['wavenum_req']))
+            st.write("Current setting at", display_wavenum)
+            display_atd(atd, wavenum_req=display_wavenum)
+            
+            filter1 = 0.#st.number_input('OD 1', value=0.)
+            filter2 = 0.#st.number_input('OD 2', value=0.)
             load_button = st.button("Extract Spectrum!", key='load-button-press',
                     on_click=load_data_button)
             
