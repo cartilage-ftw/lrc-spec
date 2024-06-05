@@ -93,6 +93,7 @@ if uploaded_file is not None:
         except Exception as e:
             st.write(f"Error plotting spectrum from file {uploaded_file.name}! " + \
                   "\nPlease check if you're using the correct file/option")
+            st.write(e)
     else:
         try:
             st.write("### Arrival Time Distribution")
@@ -116,6 +117,7 @@ if uploaded_file is not None:
             st.write(f'Error plotting the ATD from {uploaded_file.name}!\n' +
                   'Please check if all wavenumbers are not garbage (e.g. -33333)')
             st.write(atd)
+            st.write(e)
 
 st.write("## Line Fitting")
 
