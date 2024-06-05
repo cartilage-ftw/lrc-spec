@@ -4,15 +4,42 @@ import matplotlib.pyplot as plt
 
 import level_pop
 
+from scipy.stats import bootstrap
 from line_fitting import fit_two_gaussians, fit_gaussian
 
 pd.set_option("display.precision", 8) # show up to 8 decimal places
 data_nov = '../data/lrc/2023-11-09-18-04-07.csv'
 
-plt.rcParams['figure.dpi'] = 150
-plt.rcParams['text.usetex'] = True
-plt.rcParams['font.family'] = 'serif'
-plt.rcParams['font.serif'] = ['Computer Modern']
+
+
+
+class ATDistribution:
+    """
+    Defines an object that lets you calculate the MS fraction
+    If it's unobvious why I defined a separate class for one method,
+    it was to facilitate uncertainty analysis with the "bootstrap" method
+    the callable "ms_fraction" was needed
+    """
+    def __init__(self, gs_cutoff):
+        self.gs_cutoff = gs_cutoff
+
+    def ms_fraction(self, data):
+        ms_counts = np.sum(np.where(data < self.gs_cutoff, 1, 0))#len(data[data['cycle_time'] < self.gs_cutoff])
+        ms_frac = ms_counts/len(data)
+        return ms_frac
+
+
+def calculate_bootstrap_error(data, ms_cut):
+    """
+    TODO: document this properly
+    """
+    atd = data['cycle_time']*1E3
+    # the scipy method requires you to put the data in a sequence
+    atd_sample = (atd, ) # thus, I turned it into a tuple
+    atd_distrib = ATDistribution(gs_cutoff=ms_cut)
+    res = bootstrap(atd_sample, atd_distrib.ms_fraction)
+    print("Error on MS Fraction", res.standard_error)
+    return res
 
 
 def read_lrc_timeseries(file_name, buncher_delay=0, buncher_cycle_dur=1E-3, discard_garbage=True):
@@ -84,16 +111,21 @@ def make_spectrum(data, ms_cut = 0.29, filters=[0, 0], transm_percent=100., file
     ms_percents = []
     wav_avgs = []
     wav_errs = []
+    ms_errors_percent = []
     for wavenum_step, data_step in data.groupby('wavenum_req'):
         wave_obs_av = np.average(data_step['wavenum_obs'])
         wave_obs_std = np.std(data_step['wavenum_obs'])
-        ms_cts = len(data_step[data_step['cycle_time']*1E3 < ms_cut])
-        ms_percents.append(100*ms_cts/len(data_step))
+        arrival_times = data_step['cycle_time']*1E3 # converted to millisec
+        atd = ATDistribution(gs_cutoff=ms_cut)
+        atd_sample = (arrival_times, )
+        bootstrap_res = bootstrap(atd_sample, atd.ms_fraction)
+        ms_percents.append(100*atd.ms_fraction(arrival_times))
+        ms_errors_percent.append(100*bootstrap_res.standard_error)
         wav_avgs.append(wave_obs_av)
         wav_errs.append(wave_obs_std)
     
     laser_text = 'Laser: 8kHz, 56A'
-    ax.errorbar(wav_avgs, xerr=wav_errs, y=ms_percents, capsize=2, marker='o', markersize=6,
+    ax.errorbar(wav_avgs, xerr=wav_errs, y=ms_percents, yerr=ms_errors_percent, capsize=2, marker='o', markersize=6,
                 c='deeppink', ls='', label=laser_text)
     ax.plot(wav_avgs, ms_percents, c='dimgray')
     plt.xlabel('Wavenumber [cm-1]')
@@ -105,10 +137,11 @@ def make_spectrum(data, ms_cut = 0.29, filters=[0, 0], transm_percent=100., file
                     s=f'OD={filters[0]:.1f}+{filters[1]:.1f}'+'\n'+f'Transmission: {transm_percent}\%')
     plt.show()
     spec_data = pd.DataFrame(data={'Wavenumber':wav_avgs, 'Wavenumber_err':wav_errs,
-                     'MS Fraction':ms_percents})
+                     'MS Fraction':ms_percents, 'MS Error':ms_errors_percent})
     if save_file == True:
         spec_data.to_csv(file_name, index=False)
     return spec_data#get_peak_heights(wav_avgs, ms_percents)
+
 
 if __name__ == "__main__":
     file_names = ['2023-11-16-17-41-06.csv', '2023-11-16-18-03-22.csv', '2023-11-16-18-17-39.csv',
