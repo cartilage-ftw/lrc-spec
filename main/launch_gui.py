@@ -18,7 +18,7 @@ st.write("""If anything breaks, blame Aayush. As simple as that""")
 #spec = pd.read_csv('../data/spectra/2023-11-24-17-48-38_stacked_spec.csv')
 
 
-file_type = st.radio("Type of data", ['Arrival Time Distribution', 'Spectrum'])
+file_type = st.radio("Content of File:", ['Raw Time Series', 'Extracted Spectrum'])
 
 uploaded_file = st.file_uploader("Enter the file you'd like to read from")
 
@@ -61,11 +61,16 @@ def display_atd(file, bunching_delay, bunching_freq):
         print('Why is it not finding a non-zero value?')
     #pass
 
-slider_container = st.container()
+st.write("""In some measurements you may have kept the laser off,
+          in which case the wavemeter read out a garbage value such as -33333""")
+
+garbage_wave_flag = st.radio("""Discard recorded hits with garbage wavelength readouts? (e.g. -33,333)""",
+                            options=['Yes', 'No, keep'])
 
 def load_data_button():
     #display_atd(uploaded_file, buncher_delay, bunching_freq)
-    atd = io_utils.read_lrc_timeseries(uploaded_file, buncher_delay, 1/bunching_freq, discard_garbage=True)
+    atd = io_utils.read_lrc_timeseries(uploaded_file, buncher_delay, 1/bunching_freq,
+                         discard_garbage=(garbage_wave_flag == 'Yes'))
     io_utils.make_spectrum(atd, ms_cut=ms_cut_pos, filters=[filter1, filter2],
                            transm_percent=saturation_curve.get_transm(filter1, filter2),
                            file_name=uploaded_file.name[:-4] + '_spectrum.csv')
@@ -97,11 +102,21 @@ line1_pos = st.number_input('Enter mean value of first multiplet')
 line2_pos = st.number_input('Second multiplet')
 line3_pos = st.number_input('Third Multiplet')
 
-gauss_sigma = st.number_input('Enter $\sigma$ of the Gaussian component of the line profile')
+st.write(""" The fitted profile will be a [Voigt](https://en.wikipedia.org/wiki/Voigt_profile). You can choose if you'd
+          prefer the Gaussian (inhomogeneous) component to be fixed (e.g. if the laser bandwidth is known via measurement)
+          or varied to obtain the best fit""")
+
+gaussian_fixed_flag = st.radio("Gaussian component", ['Fixed', 'Variable'])
+
+gaussian_fwhm = st.number_input(r'Enter $\Delta \nu_{\textrm{FWHM}}$ in GHz of the Gaussian component of the line profile',
+                                value=4.6, disabled=gaussian_fixed_flag =='Variable')
+
+
 fit_method_list = ['Simultaneously', 'Each line separately']
 fit_method_option = st.radio("Fit all three lines", fit_method_list)
 
 fit_button = st.button('Fit Lines!')
+
 
 def print_fit_results(fit_results):
     if type(fit_results) == list: # if the three were fitted separately
@@ -131,20 +146,23 @@ def print_fit_results(fit_results):
             st.write(fit_results.params[v + 'center'], 'Standard Error:',
                      fit_results.params[v+'center'].stderr)
             sigma = fit_results.params[v + 'sigma']
+            fwhm = fit_results.params[v + 'fwhm']
             st.write(sigma, 'Standard Error:',sigma.stderr)
             st.write(fit_results.params[v + 'amplitude'], 'Standard Error:', 
                      fit_results.params[v+'amplitude'].stderr)
             st.write(f"""Line {v[1]} has $\Gamma=${float(gamma)*30:.2f} $\pm$ {float(gamma.stderr)*30:.2f} GHz""")
-
+            st.write(f""" and FWHM {float(fwhm*30):.2f} GHz""")
 if fit_button:
     # make a finer grid to evaluate the fitted function over (instead of just the observed points)
     x_finer = np.linspace(np.min(spec_data['Wavenumber']), np.max(spec_data['Wavenumber']), 1000)
 
     if fit_method_option == 'Simultaneously':
         print_fit_results(line_fitting.fit_triple_voigt(spec_data, line1_pos, line2_pos, line3_pos,
-                                            gauss_sigma/29.99))
+                                         gaussian_fwhm/(29.99*2.355),
+                                         vary_gauss_component=(gaussian_fixed_flag == 'Variable')))
     else:
         print_fit_results(line_fitting.fit_separate_voigts(spec_data,
-                         line1_pos, line2_pos, line3_pos, gauss_sigma/29.99))
+                         line1_pos, line2_pos, line3_pos, gaussian_fwhm/(29.99*2.355),
+                         vary_gauss_component=(gaussian_fixed_flag == 'Variable')))
     
     #st.write(f"""{fit.fit_report()}""")

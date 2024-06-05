@@ -24,7 +24,8 @@ def lin_offset(x, offset):
     return offset
 
 
-def fit_separate_voigts(spec_data, pos1, pos2, pos3, gauss_sigma, fit_region_width=0.35):
+def fit_separate_voigts(spec_data, pos1, pos2, pos3, gauss_sigma, fit_region_width=0.35,
+                         vary_gauss_component=True):
     """
     
     Keyword arguments
@@ -47,7 +48,7 @@ def fit_separate_voigts(spec_data, pos1, pos2, pos3, gauss_sigma, fit_region_wid
         v_pars[f'v{index+1}_' + 'center'].set(min=np.min(spec_region['Wavenumber']),
                                 max=np.max(spec_region['Wavenumber']))
         # fix the Gaussian sigma
-        v_pars['v{0}_sigma'.format(index+1)].set(value=gauss_sigma, vary=False)
+        v_pars['v{0}_sigma'.format(index+1)].set(value=gauss_sigma, vary=vary_gauss_component)
 
         normed_ms = spec_region['MS Fraction']/100
         epsilon = 0.05 # a smoothing parameter in case a 0.0 value is encountered
@@ -59,15 +60,12 @@ def fit_separate_voigts(spec_data, pos1, pos2, pos3, gauss_sigma, fit_region_wid
     return fit_results
 
 
-def fit_triple_voigt(spec_data, pos1, pos2, pos3, gauss_sigma):
+def fit_triple_voigt(spec_data, pos1, pos2, pos3, gauss_sigma, vary_gauss_component=True):
     v1 = VoigtModel(prefix='v1_')
     v2 = VoigtModel(prefix='v2_')
     v3 = VoigtModel(prefix='v3_')
     #y_offset = Model(lin_offset)
     model = v1 + v2 + v3 #+ y_offset
-    #spec_data.reset_index(inplace=True)
-    #filter = () & (spec_data['Wavenumber'] < 28504.)
-    #spec_data = spec_data[spec_data['Wavenumber'] >= 28502.]
 
     pars = v1.guess(spec_data['MS Fraction'], x=spec_data['Wavenumber'], center=pos1)#.set(value=pos1)#guess(,)
     pars.update(v2.guess(spec_data['MS Fraction'],  x=spec_data['Wavenumber'],center=pos2))
@@ -79,8 +77,9 @@ def fit_triple_voigt(spec_data, pos1, pos2, pos3, gauss_sigma):
         pars[v + 'amplitude'].set(min=0., value=20, max=100.)
         pars[v + 'center'].set(min=np.min(spec_data['Wavenumber']),
                                 max=np.max(spec_data['Wavenumber']))
-        pars[v + 'sigma'].set(value=gauss_sigma, vary=False)
-        # above line makes the Lorentzian gamma independent of the Gaussian sigma
+        # passing vary=False makes the Lorentzian gamma independent of the Gaussian sigma
+        pars[v + 'sigma'].set(value=gauss_sigma, vary=vary_gauss_component)
+    
     # need to make an initial guess
     #print(pars)
     # the guess() method doesn't work for composite models. I need to guess manually
@@ -89,7 +88,7 @@ def fit_triple_voigt(spec_data, pos1, pos2, pos3, gauss_sigma):
     
     normed_ms = spec_data['MS Fraction']/100
     epsilon = 0.05
-    weights = 1/np.sqrt((epsilon + normed_ms)*(1-normed_ms)) ##
+    weights = (epsilon + normed_ms)*(1-normed_ms)#np.ones(len(normed_ms))#1/np.sqrt() ##
     return model.fit(spec_data['MS Fraction'], pars, x=spec_data['Wavenumber'], weights=weights)#, method='emcee')
     #print(fit.fit_report())
 
