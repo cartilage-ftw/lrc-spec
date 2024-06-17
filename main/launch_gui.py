@@ -9,6 +9,7 @@ import line_fitting
 import saturation_curve
 
 from bokeh.plotting import figure
+from bokeh.models import Span
 
 
 st.set_page_config(page_title='LRC Analysis Pipeline', page_icon=':stars:')
@@ -60,6 +61,9 @@ def display_atd(atd, wavenum_req, wavenum_obs='#TODO'):
                      y_range=(0, 1.05*np.max(weights)))
     fig_atd.quad(top=weights, bottom=0, left=bin_edges[:-1], right=bin_edges[1:],
                  fill_color='skyblue', line_color='white', legend_label=f'{median_wavenum:.2f} cm-1')
+    gs_cutoff_line = Span(location=ms_cut_pos*1E3, dimension='height', line_color='red',
+                          line_width=1)
+    fig_atd.renderers.extend([gs_cutoff_line])
     st.bokeh_chart(fig_atd, use_container_width=True)
 
     st.write("Did it not work? I got something for you")
@@ -101,7 +105,6 @@ if uploaded_file is not None:
             st.write("### Arrival Time Distribution")
             bunching_freq = st.number_input('Bunching Freq (in Hz)', value=100)
             buncher_delay = st.number_input('Buncher Delay (in seconds)')
-            ms_cut_pos = st.number_input('GS Cutoff [ms]', value=0.295, step=1E-3, format='%.3f')
 
             global atd
             atd = load_atd()
@@ -110,6 +113,7 @@ if uploaded_file is not None:
             st.write("Current setting at", display_wavenum*2, 'second harmonic. Please mind that ' + \
                                 "there may be an offset between requested and actual. " + \
                                     "Trust the WS7 wavemeter readout instead.")
+            ms_cut_pos = st.slider('GS Cutoff [ms]', value=0.295, step=1E-3, format='%.3f')
             display_atd(atd, wavenum_req=display_wavenum)
             
             filter1 = 0.#st.number_input('OD 1', value=0.)
@@ -140,6 +144,7 @@ if uploaded_file is not None and st.session_state.display_spectrum == True:
                            )
     except Exception as e:
         st.write('Something went wrong while plotting spectrum!\n', e)
+
 
 
 st.write("## Line Fitting")
