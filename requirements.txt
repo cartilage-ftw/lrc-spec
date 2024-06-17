@@ -4,3 +4,4 @@ scipy
 plotly>=5.22.0
 bokeh==2.4.3
 PyWavelets
+latex
