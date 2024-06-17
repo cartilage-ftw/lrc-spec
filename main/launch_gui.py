@@ -66,9 +66,6 @@ def display_atd(atd, wavenum_req, wavenum_obs='#TODO'):
     fig_atd.renderers.extend([gs_cutoff_line])
     st.bokeh_chart(fig_atd, use_container_width=True)
 
-    st.write("Did it not work? I got something for you")
-    #fix_everything()
-
 
 
 st.write("""In some measurements you may have kept the laser off,
@@ -88,8 +85,9 @@ if 'display_spectrum' not in st.session_state:
     st.session_state.display_spectrum = True
 
 
-def toggle_spectrum_display():
-    st.session_state.display_spectrum = not st.session_state.display_spectrum
+#def toggle_spectrum_display():
+#st.session_state.display_spectrum = True#not st.session_state.display_spectrum
+
 
 
 if uploaded_file is not None:
@@ -118,7 +116,7 @@ if uploaded_file is not None:
             
             filter1 = 0.#st.number_input('OD 1', value=0.)
             filter2 = 0.#st.number_input('OD 2', value=0.)
-            load_button = st.button("Hide/Show Spectrum!", on_click=toggle_spectrum_display())
+            #load_button = st.button("Hide/Show Spectrum!", on_click=toggle_spectrum_display())
             
         except Exception as e:
             st.write(f'Error plotting the ATD from {uploaded_file.name}!\n' +
@@ -136,7 +134,7 @@ if uploaded_file is not None and st.session_state.display_spectrum == True:
         st.write("NOTE: Currently I had to disable calculation of bootstrap uncertainty for the y-axis.\n" + \
                  " It was taking too long!")
         plot_spectrum_from_data(spectrum_data)
-        st.write(st.session_state)
+        #st.write(st.session_state)
         # also add a button to manually save this spectrum's data
         st.download_button(label='Save Spectrum to Device',
                            data=spectrum_data.to_csv(),
@@ -144,7 +142,6 @@ if uploaded_file is not None and st.session_state.display_spectrum == True:
                            )
     except Exception as e:
         st.write('Something went wrong while plotting spectrum!\n', e)
-
 
 
 st.write("## Line Fitting")
