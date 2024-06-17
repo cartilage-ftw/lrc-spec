@@ -10,17 +10,25 @@ import saturation_curve
 
 from bokeh.plotting import figure
 
+
+st.set_page_config(page_title='LRC Analysis Pipeline', page_icon=':stars:')
+
+# display logo
 lrc_logo_url = 'https://www.lrc-project.eu/' + \
                 r'Webpage%20of%20the%20European%20LRC%20project-Dateien/LRC-color-300x77.png'
 
-# display logo
 st.write('![LRC Logo]({0})'.format(lrc_logo_url))
+
+# Disclaimer
 st.write('# LRC Data Analysis Interface')
 st.write("""If anything breaks, blame Aayush. As simple as that""")
 
 
 #spec = pd.read_csv('../data/spectra/2023-11-24-17-48-38_stacked_spec.csv')
 
+"""
+Start of GUI buttons, etc.
+"""
 
 file_type = st.radio("Content of File:", ['Raw Time Series', 'Extracted Spectrum'])
 
@@ -76,8 +84,7 @@ if 'display_spectrum' not in st.session_state:
     st.session_state.display_spectrum = True
 
 
-def allow_spectrum_display():
-    st.write("If you see this before clicking, it was already too late")
+def toggle_spectrum_display():
     st.session_state.display_spectrum = not st.session_state.display_spectrum
 
 
@@ -107,8 +114,7 @@ if uploaded_file is not None:
             
             filter1 = 0.#st.number_input('OD 1', value=0.)
             filter2 = 0.#st.number_input('OD 2', value=0.)
-            load_button = st.button("Hide/Show Spectrum!", on_click=allow_spectrum_display()) #key='load-button-press',
-                    #on_click=load_data_button)
+            load_button = st.button("Hide/Show Spectrum!", on_click=toggle_spectrum_display())
             
         except Exception as e:
             st.write(f'Error plotting the ATD from {uploaded_file.name}!\n' +
@@ -127,7 +133,7 @@ if st.session_state.display_spectrum == True:
         plot_spectrum_from_data(spectrum_data)
     except Exception as e:
         st.write('Something went wrong while plotting spectrum!\n', e)
-    st.write('Here you go with the spectrum!')
+
 
 st.write("## Line Fitting")
 
