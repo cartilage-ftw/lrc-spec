@@ -10,7 +10,10 @@ from line_fitting import fit_two_gaussians, fit_gaussian
 pd.set_option("display.precision", 8) # show up to 8 decimal places
 data_nov = '../data/lrc/2023-11-09-18-04-07.csv'
 
-
+plt.rcParams['figure.dpi'] = 150
+plt.rcParams['text.usetex'] = True
+plt.rcParams['font.family'] = 'serif'
+plt.rcParams['font.serif'] = ['Computer Modern']
 
 
 class ATDistribution:
@@ -64,10 +67,10 @@ def read_lrc_timeseries(file_name, buncher_delay=0, buncher_cycle_dur=1E-3, disc
         useful = dat[dat['wavenum_obs'] >= 0.]
     else:
         useful = dat
-    useful['time_s'] = useful['Ticks']/40E6
+    useful['time_s'] = useful['Ticks']/40E6 # tick rate is 40 MHz, divide by that to get time in secs
     useful['cycle_time'] = (useful['time_s'] % buncher_cycle_dur) + buncher_delay
 
-    print("Duration of operation:", useful.iloc[-1]['time_s'])
+    #print("Duration of operation:", useful.iloc[-1]['time_s'])
     print(useful.head())
     return useful
 
@@ -118,26 +121,27 @@ def make_spectrum(data, ms_cut = 0.29, filters=[0, 0], transm_percent=100., file
         arrival_times = data_step['cycle_time']*1E3 # converted to millisec
         atd = ATDistribution(gs_cutoff=ms_cut)
         atd_sample = (arrival_times, )
-        bootstrap_res = bootstrap(atd_sample, atd.ms_fraction)
+        print("Running bootstrap for step", wavenum_step)
+        #bootstrap_res = bootstrap(atd_sample, atd.ms_fraction)
         ms_percents.append(100*atd.ms_fraction(arrival_times))
-        ms_errors_percent.append(100*bootstrap_res.standard_error)
+        #ms_errors_percent.append(100*bootstrap_res.standard_error)
         wav_avgs.append(wave_obs_av)
         wav_errs.append(wave_obs_std)
     
     laser_text = 'Laser: 8kHz, 56A'
-    ax.errorbar(wav_avgs, xerr=wav_errs, y=ms_percents, yerr=ms_errors_percent, capsize=2, marker='o', markersize=6,
-                c='deeppink', ls='', label=laser_text)
-    ax.plot(wav_avgs, ms_percents, c='dimgray')
+    #ax.errorbar(wav_avgs, xerr=wav_errs, y=ms_percents, yerr=ms_errors_percent, capsize=2, marker='o', markersize=6,
+    #            c='deeppink', ls='', label=laser_text)
+    #ax.plot(wav_avgs, ms_percents, c='dimgray')
     plt.xlabel('Wavenumber [cm-1]')
     plt.ylabel('Metastable Pop \%')
     plt.ticklabel_format(style='plain', useOffset=False)
     plt.tight_layout()
     
-    ax.text(x=np.min(data_all['wavenum_obs']), y=0.95*np.max(ms_percents),
-                    s=f'OD={filters[0]:.1f}+{filters[1]:.1f}'+'\n'+f'Transmission: {transm_percent}\%')
-    plt.show()
+    #ax.text(x=np.min(data_all['wavenum_obs']), y=0.95*np.max(ms_percents),
+    #                s=f'OD={filters[0]:.1f}+{filters[1]:.1f}'+'\n'+f'Transmission: {transm_percent}\%')
+    #plt.show()
     spec_data = pd.DataFrame(data={'Wavenumber':wav_avgs, 'Wavenumber_err':wav_errs,
-                     'MS Fraction':ms_percents, 'MS Error':ms_errors_percent})
+                     'MS Fraction':ms_percents})#, 'MS Error':ms_errors_percent})
     if save_file == True:
         spec_data.to_csv(file_name, index=False)
     return spec_data#get_peak_heights(wav_avgs, ms_percents)

@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import time
 
 import io_utils
 import visual_utils
@@ -26,7 +27,7 @@ file_type = st.radio("Content of File:", ['Raw Time Series', 'Extracted Spectrum
 uploaded_file = st.file_uploader("Enter the file you'd like to read from")
 
 
-def plot_spectrum(file):
+def plot_spectrum_from_file(file):
     st.write('Reading file:', file.name)
     global spec_data
     spec_data = pd.read_csv(file)
@@ -34,9 +35,9 @@ def plot_spectrum(file):
 
 
 
-def plot_spectrum_from_data(spec_data, file_name):
+def plot_spectrum_from_data(spec_data):
     global spec_fig
-    spec_fig = visual_utils.make_spectrum_fig(spec_data, file_name=file_name)
+    spec_fig = visual_utils.make_spectrum_fig(spec_data)
     st.bokeh_chart(spec_fig)
 
 
@@ -70,20 +71,19 @@ def load_atd():
     return io_utils.read_lrc_timeseries(uploaded_file, buncher_delay, 1/bunching_freq,
                          discard_garbage=(garbage_wave_flag == 'Yes'))
 
-def load_data_button():
-    #display_atd(uploaded_file, buncher_delay, bunching_freq)
-    atd = io_utils.read_lrc_timeseries(uploaded_file, buncher_delay, 1/bunching_freq,
-                         discard_garbage=(garbage_wave_flag == 'Yes'))
-    io_utils.make_spectrum(atd, ms_cut=ms_cut_pos, filters=[filter1, filter2],
-                           transm_percent=saturation_curve.get_transm(filter1, filter2),
-                           file_name=uploaded_file.name[:-4] + '_spectrum.csv')#, save_file=False)
+
+if 'display_spectrum' not in st.session_state:
+    st.session_state.display_spectrum = False
 
 
+def allow_spectrum_display():
+    st.write("If you see this before clicking, it was already too late")
+    st.session_state.display_spectrum = not st.session_state.display_spectrum
 
 if uploaded_file is not None:
     if 'spectrum' in file_type.lower():
         try:
-            plot_spectrum(uploaded_file)
+            plot_spectrum_from_file(uploaded_file)
         except Exception as e:
             st.write(f"Error plotting spectrum from file {uploaded_file.name}! " + \
                   "\nPlease check if you're using the correct file/option")
@@ -99,13 +99,15 @@ if uploaded_file is not None:
             atd = load_atd()
             display_wavenum = st.select_slider("Select wavenumber step to display",
                                         options=list(dict.fromkeys(atd['wavenum_req'])))
-            st.write("Current setting at", display_wavenum)
+            st.write("Current setting at", display_wavenum*2, 'second harmonic. Please mind that ' + \
+                                "there may be an offset between requested and actual. " + \
+                                    "Trust the WS7 wavemeter readout instead.")
             display_atd(atd, wavenum_req=display_wavenum)
             
             filter1 = 0.#st.number_input('OD 1', value=0.)
             filter2 = 0.#st.number_input('OD 2', value=0.)
-            load_button = st.button("Extract Spectrum!", key='load-button-press',
-                    on_click=load_data_button)
+            load_button = st.button("Show/Hide Spectrum!", on_click=allow_spectrum_display()) #key='load-button-press',
+                    #on_click=load_data_button)
             
         except Exception as e:
             st.write(f'Error plotting the ATD from {uploaded_file.name}!\n' +
@@ -113,7 +115,18 @@ if uploaded_file is not None:
             st.write(atd)
             st.write(e)
 
-
+if st.session_state.display_spectrum == True:
+    try:
+        st.write("Creating spectrum")
+        spectrum_data = io_utils.make_spectrum(atd, ms_cut=ms_cut_pos, filters=[filter1, filter2],
+                            transm_percent=saturation_curve.get_transm(filter1, filter2),
+                            save_file=False)
+        st.write("NOTE: Currently I had to disable calculation of bootstrap uncertainty for the y-axis.\n" + \
+                 " It was taking too long!")
+        plot_spectrum_from_data(spectrum_data)
+    except Exception as e:
+        st.write('Something went wrong while plotting spectrum!\n', e)
+    st.write('Here you go with the spectrum!')
 
 st.write("## Line Fitting")
 
