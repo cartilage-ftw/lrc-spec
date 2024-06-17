@@ -42,7 +42,6 @@ def plot_spectrum_from_file(file):
     plot_spectrum_from_data(spec_data, file.name)
 
 
-
 def plot_spectrum_from_data(spec_data):
     global spec_fig
     spec_fig = visual_utils.make_spectrum_fig(spec_data)
@@ -76,6 +75,7 @@ garbage_wave_flag = st.radio("""Discard recorded hits with garbage wavelength re
 
 
 def load_atd():
+    st.session_state.file_name=uploaded_file.name
     return io_utils.read_lrc_timeseries(uploaded_file, buncher_delay, 1/bunching_freq,
                          discard_garbage=(garbage_wave_flag == 'Yes'))
 
@@ -122,7 +122,8 @@ if uploaded_file is not None:
             st.write(atd)
             st.write(e)
 
-if st.session_state.display_spectrum == True:
+
+if uploaded_file is not None and st.session_state.display_spectrum == True:
     try:
         st.write("Creating spectrum")
         spectrum_data = io_utils.make_spectrum(atd, ms_cut=ms_cut_pos, filters=[filter1, filter2],
@@ -131,6 +132,12 @@ if st.session_state.display_spectrum == True:
         st.write("NOTE: Currently I had to disable calculation of bootstrap uncertainty for the y-axis.\n" + \
                  " It was taking too long!")
         plot_spectrum_from_data(spectrum_data)
+        st.write(st.session_state)
+        # also add a button to manually save this spectrum's data
+        st.download_button(label='Save Spectrum to Device',
+                           data=spectrum_data.to_csv(),
+                           file_name=st.session_state.file_name[:-4] + '_spectrum.csv',
+                           )
     except Exception as e:
         st.write('Something went wrong while plotting spectrum!\n', e)
 
