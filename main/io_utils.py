@@ -132,10 +132,10 @@ def make_spectrum(data, ms_cut = 0.29, filters=[0, 0], transm_percent=100., file
     #ax.errorbar(wav_avgs, xerr=wav_errs, y=ms_percents, yerr=ms_errors_percent, capsize=2, marker='o', markersize=6,
     #            c='deeppink', ls='', label=laser_text)
     #ax.plot(wav_avgs, ms_percents, c='dimgray')
-    plt.xlabel('Wavenumber [cm-1]')
+    '''plt.xlabel('Wavenumber [cm-1]')
     plt.ylabel('Metastable Pop \%')
     plt.ticklabel_format(style='plain', useOffset=False)
-    plt.tight_layout()
+    plt.tight_layout()'''
     
     #ax.text(x=np.min(data_all['wavenum_obs']), y=0.95*np.max(ms_percents),
     #                s=f'OD={filters[0]:.1f}+{filters[1]:.1f}'+'\n'+f'Transmission: {transm_percent}\%')
