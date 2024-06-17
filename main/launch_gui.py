@@ -73,12 +73,13 @@ def load_atd():
 
 
 if 'display_spectrum' not in st.session_state:
-    st.session_state.display_spectrum = False
+    st.session_state.display_spectrum = True
 
 
 def allow_spectrum_display():
     st.write("If you see this before clicking, it was already too late")
     st.session_state.display_spectrum = not st.session_state.display_spectrum
+
 
 if uploaded_file is not None:
     if 'spectrum' in file_type.lower():
@@ -106,7 +107,7 @@ if uploaded_file is not None:
             
             filter1 = 0.#st.number_input('OD 1', value=0.)
             filter2 = 0.#st.number_input('OD 2', value=0.)
-            load_button = st.button("Show/Hide Spectrum!", on_click=allow_spectrum_display()) #key='load-button-press',
+            load_button = st.button("Hide/Show Spectrum!", on_click=allow_spectrum_display()) #key='load-button-press',
                     #on_click=load_data_button)
             
         except Exception as e:
