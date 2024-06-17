@@ -12,6 +12,7 @@ from bokeh.plotting import figure
 lrc_logo_url = 'https://www.lrc-project.eu/' + \
                 r'Webpage%20of%20the%20European%20LRC%20project-Dateien/LRC-color-300x77.png'
 
+# display logo
 st.write('![LRC Logo]({0})'.format(lrc_logo_url))
 st.write('# LRC Data Analysis Interface')
 st.write("""If anything breaks, blame Aayush. As simple as that""")
@@ -39,16 +40,6 @@ def plot_spectrum_from_data(spec_data, file_name):
     st.bokeh_chart(spec_fig)
 
 
-class WaveNumTuner:
-    def __init__(self, steps):
-        self.steps = steps
-
-wavenum_tuner = WaveNumTuner([0.0, 1.0, 2.0])
-
-def set_wavenum_steps(steps):
-    wavenum_tuner.steps = steps
-
-
 def display_atd(atd, wavenum_req, wavenum_obs='#TODO'):
     step_data = atd[atd['wavenum_req'] == wavenum_req]
     median_wavenum = np.median(step_data['wavenum_obs'])
@@ -63,8 +54,9 @@ def display_atd(atd, wavenum_req, wavenum_obs='#TODO'):
                  fill_color='skyblue', line_color='white', legend_label=f'{median_wavenum:.2f} cm-1')
     st.bokeh_chart(fig_atd, use_container_width=True)
 
-    #st.write("Did it not work? I got something for you")
+    st.write("Did it not work? I got something for you")
     #fix_everything()
+
 
 
 st.write("""In some measurements you may have kept the laser off,
@@ -84,7 +76,9 @@ def load_data_button():
                          discard_garbage=(garbage_wave_flag == 'Yes'))
     io_utils.make_spectrum(atd, ms_cut=ms_cut_pos, filters=[filter1, filter2],
                            transm_percent=saturation_curve.get_transm(filter1, filter2),
-                           file_name=uploaded_file.name[:-4] + '_spectrum.csv')
+                           file_name=uploaded_file.name[:-4] + '_spectrum.csv')#, save_file=False)
+
+
 
 if uploaded_file is not None:
     if 'spectrum' in file_type.lower():
@@ -104,7 +98,7 @@ if uploaded_file is not None:
             global atd
             atd = load_atd()
             display_wavenum = st.select_slider("Select wavenumber step to display",
-                                        options=set(atd['wavenum_req']))
+                                        options=list(dict.fromkeys(atd['wavenum_req'])))
             st.write("Current setting at", display_wavenum)
             display_atd(atd, wavenum_req=display_wavenum)
             
@@ -118,6 +112,8 @@ if uploaded_file is not None:
                   'Please check if all wavenumbers are not garbage (e.g. -33333)')
             st.write(atd)
             st.write(e)
+
+
 
 st.write("## Line Fitting")
 
