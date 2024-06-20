@@ -120,6 +120,7 @@ if uploaded_file is not None:
         except Exception as e:
             st.write(f'Error plotting the ATD from {uploaded_file.name}!\n' +
                   'Please check if all wavenumbers are not garbage (e.g. -33333)')
+            st.write(e.__str__)
             st.write(e)
             if atd is not None:
                 st.write(atd)
