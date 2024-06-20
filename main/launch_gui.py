@@ -120,10 +120,13 @@ if uploaded_file is not None:
         except Exception as e:
             st.write(f'Error plotting the ATD from {uploaded_file.name}!\n' +
                   'Please check if all wavenumbers are not garbage (e.g. -33333)')
-            st.write(e.__str__)
+            st.write(f"{e}")
             st.write(e)
-            if atd is not None:
+            if 'atd' in locals():
+                st.write("`atd` exists as a local variable")
                 st.write(atd)
+            elif 'atd' in globals():
+                st.write("It exists among global variables")
             else:
                 st.write("WARNING: Instance of `atd` has disappeared")
 
