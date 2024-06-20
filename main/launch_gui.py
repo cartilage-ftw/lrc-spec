@@ -33,7 +33,14 @@ Start of GUI buttons, etc.
 
 file_type = st.radio("Content of File:", ['Raw Time Series', 'Extracted Spectrum'])
 
-uploaded_file = st.file_uploader("Enter the file you'd like to read from")
+if 'file_modified' not in st.session_state:
+    st.session_state.file_modified = False
+
+def handle_file_change():
+    print("FILE MODIFIED!")
+    st.session_state.file_modified = True
+    
+uploaded_file = st.file_uploader("Enter the file you'd like to read from", on_change=handle_file_change())
 
 
 def plot_spectrum_from_file(file):
@@ -67,6 +74,7 @@ def display_atd(atd, wavenum_req, wavenum_obs='#TODO'):
     st.bokeh_chart(fig_atd, use_container_width=True)
 
 
+st.write(st.session_state)
 
 st.write("""In some measurements you may have kept the laser off,
           in which case the wavemeter read out a garbage value such as -33333""")
@@ -103,15 +111,19 @@ if uploaded_file is not None:
             bunching_freq = st.number_input('Bunching Freq (in Hz)', value=100)
             buncher_delay = st.number_input('Buncher Delay (in seconds)')
 
-            global atd
-            atd = load_atd()
-            display_wavenum = st.select_slider("Select wavenumber step to display",
-                                        options=list(dict.fromkeys(atd['wavenum_req'])))
-            st.write("Current setting at", display_wavenum*2, 'second harmonic. Please mind that ' + \
-                                "there may be an offset between requested and actual. " + \
-                                    "Trust the WS7 wavemeter readout instead.")
-            ms_cut_pos = st.slider('GS Cutoff [ms]', value=0.295, step=1E-3, format='%.3f')
-            display_atd(atd, wavenum_req=display_wavenum)
+            if st.session_state.file_modified == True:
+                global atd
+                atd = load_atd()
+                st.session_state.file_modified = False
+
+            if 'atd' in globals():
+                display_wavenum = st.select_slider("Select wavenumber step to display",
+                                            options=list(dict.fromkeys(atd['wavenum_req'])))
+                st.write("Current setting at", display_wavenum*2, 'second harmonic. Please mind that ' + \
+                                    "there may be an offset between requested and actual. " + \
+                                        "Trust the WS7 wavemeter readout instead.")
+                ms_cut_pos = st.slider('GS Cutoff [ms]', value=0.295, step=1E-3, format='%.3f')
+                display_atd(atd, wavenum_req=display_wavenum)
             
             filter1 = 0.#st.number_input('OD 1', value=0.)
             filter2 = 0.#st.number_input('OD 2', value=0.)
@@ -120,13 +132,10 @@ if uploaded_file is not None:
         except Exception as e:
             st.write(f'Error plotting the ATD from {uploaded_file.name}!\n' +
                   'Please check if all wavenumbers are not garbage (e.g. -33333)')
-            st.write(f"{e}")
+            st.write(e.__str__)
             st.write(e)
-            if 'atd' in locals():
-                st.write("`atd` exists as a local variable")
+            if atd is not None:
                 st.write(atd)
-            elif 'atd' in globals():
-                st.write("It exists among global variables")
             else:
                 st.write("WARNING: Instance of `atd` has disappeared")
 
@@ -134,28 +143,22 @@ if uploaded_file is not None:
 if uploaded_file is not None and st.session_state.display_spectrum == True:
     try:
         st.write("Creating spectrum")
-        spectrum_data = io_utils.make_spectrum(atd, ms_cut=ms_cut_pos, filters=[filter1, filter2],
-                            transm_percent=saturation_curve.get_transm(filter1, filter2),
-                            save_file=False)
-        st.write("NOTE: Currently I had to disable calculation of bootstrap uncertainty for the y-axis.\n" + \
-                 " It was taking too long!")
-        plot_spectrum_from_data(spectrum_data)
-        #st.write(st.session_state)
-        # also add a button to manually save this spectrum's data
-        st.download_button(label='Save Spectrum to Device',
-                           data=spectrum_data.to_csv(),
-                           file_name=st.session_state.file_name.replace('.csv', '') + '_spectrum.csv',
-                           )
+        if 'atd' in globals():
+            spectrum_data = io_utils.make_spectrum(atd, ms_cut=ms_cut_pos, filters=[filter1, filter2],
+                                transm_percent=saturation_curve.get_transm(filter1, filter2),
+                                save_file=False)
+            st.write("NOTE: Currently I had to disable calculation of bootstrap uncertainty for the y-axis.\n" + \
+                    " It was taking too long!")
+            plot_spectrum_from_data(spectrum_data)
+            #st.write(st.session_state)
+            # also add a button to manually save this spectrum's data
+            st.download_button(label='Save Spectrum to Device',
+                            data=spectrum_data.to_csv(),
+                            file_name=st.session_state.file_name.replace('.csv', '') + '_spectrum.csv',
+                            )
     except Exception as e:
         st.write('Something went wrong while plotting spectrum!\n', e)
 
-duo_proud_img = 'https://blog.singleton.io/static/imgs-duolingo/cover.png'
-
-reward_button = st.radio("Have you done your work? I got something for you",
-                         options=['No not yet :(', 'Yesss! :star:'])
-if 'yes' in reward_button.lower():
-    st.write("You deserve to be rewarded!")
-    st.image(duo_proud_img)
 
 st.write("## Line Fitting")
 
