@@ -89,7 +89,6 @@ if 'display_spectrum' not in st.session_state:
 #st.session_state.display_spectrum = True#not st.session_state.display_spectrum
 
 
-
 if uploaded_file is not None:
     if 'spectrum' in file_type.lower():
         try:
@@ -121,8 +120,11 @@ if uploaded_file is not None:
         except Exception as e:
             st.write(f'Error plotting the ATD from {uploaded_file.name}!\n' +
                   'Please check if all wavenumbers are not garbage (e.g. -33333)')
-            st.write(atd)
             st.write(e)
+            if atd is not None:
+                st.write(atd)
+            else:
+                st.write("WARNING: Instance of `atd` has disappeared")
 
 
 if uploaded_file is not None and st.session_state.display_spectrum == True:
@@ -138,11 +140,18 @@ if uploaded_file is not None and st.session_state.display_spectrum == True:
         # also add a button to manually save this spectrum's data
         st.download_button(label='Save Spectrum to Device',
                            data=spectrum_data.to_csv(),
-                           file_name=st.session_state.file_name[:-4] + '_spectrum.csv',
+                           file_name=st.session_state.file_name.replace('.csv', '') + '_spectrum.csv',
                            )
     except Exception as e:
         st.write('Something went wrong while plotting spectrum!\n', e)
 
+duo_proud_img = 'https://blog.singleton.io/static/imgs-duolingo/cover.png'
+
+reward_button = st.radio("Have you done your work? I got something for you",
+                         options=['No not yet :(', 'Yesss! :star:'])
+if 'yes' in reward_button.lower():
+    st.write("You deserve to be rewarded!")
+    st.image(duo_proud_img)
 
 st.write("## Line Fitting")
 
