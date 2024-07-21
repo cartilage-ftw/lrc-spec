@@ -287,3 +287,19 @@ if fit_button:
                          vary_gauss_component=(gaussian_fixed_flag == 'Variable')))
     
     #st.write(f"""{fit.fit_report()}""")
+
+
+
+"""
+______
+## Lab Notebook Summary
+"""
+
+show_meas_notes = st.radio("Do you want to look at the notes from your past measurements?",
+                           options=['Yes, please', 'No'])
+
+notes_file_path = '../notes/measurements/summary_key_measurements.md'
+
+if 'yes' in show_meas_notes.lower():
+    md_file_contents = Path(notes_file_path).read_text()
+    st.write(md_file_contents)
