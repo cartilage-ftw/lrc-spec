@@ -303,7 +303,6 @@ notes_file_path = '../notes/measurements/summary_key_measurements.md'
 
 # NOTE: The working directory might be different when deployed on the web.
 if 'notes' in os.listdir('./'):
-    st.write("Found `notes` folder in the current working directory")
     # get rid of .. and change that to ./
     notes_file_path = notes_file_path[1:]
 
