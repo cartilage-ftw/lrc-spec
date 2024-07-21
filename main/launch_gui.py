@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import time
+import time, os
 
 import io_utils
 import visual_utils
@@ -298,7 +298,14 @@ ______
 show_meas_notes = st.radio("Do you want to look at the notes from your past measurements?",
                            options=['Yes, please', 'No'])
 
+
 notes_file_path = '../notes/measurements/summary_key_measurements.md'
+
+# NOTE: The working directory might be different when deployed on the web.
+if 'notes' in os.listdir('./'):
+    st.write("Found `notes` folder in the current working directory")
+    # get rid of .. and change that to ./
+    notes_file_path = notes_file_path[1:]
 
 if 'yes' in show_meas_notes.lower():
     md_file_contents = Path(notes_file_path).read_text()
