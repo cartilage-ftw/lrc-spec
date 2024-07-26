@@ -89,7 +89,7 @@ def fit_triple_voigt(spec_data, pos1, pos2, pos3, gauss_sigma, vary_gauss_compon
     normed_ms = spec_data['MS Fraction']/100
     epsilon = 0.05
     weights = (epsilon + normed_ms)*(1-normed_ms)#np.ones(len(normed_ms))#1/np.sqrt() ##
-    return model.fit(spec_data['MS Fraction'], pars, x=spec_data['Wavenumber'], weights=weights)#, method='emcee')
+    return model.fit(spec_data['MS Fraction'], pars, x=spec_data['Wavenumber'])#, weights=weights)#, method='emcee')
     #print(fit.fit_report())
 
 
