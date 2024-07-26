@@ -10,7 +10,7 @@ import saturation_curve
 
 from bokeh.plotting import figure
 from bokeh.models import Span
-
+from pathlib import Path
 
 st.set_page_config(page_title='LRC Analysis Pipeline', page_icon=':stars:')
 
@@ -196,20 +196,21 @@ def print_fit_results(fit_results):
             sigma = fit_results.params[v + 'sigma']
             fwhm = fit_results.params[v + 'fwhm']
             st.write(sigma, 'Standard Error:',sigma.stderr)
-            st.write(fit_results.params[v + 'amplitude'], 'Standard Error:', 
-                     fit_results.params[v+'amplitude'].stderr)
+            st.write(fit_results.params[v + 'height'], 'Standard Error:', 
+                     fit_results.params[v+'height'].stderr)
             st.write(f"""Line {v[1]} has $\Gamma=${float(gamma)*30:.2f} $\pm$ {float(gamma.stderr)*30:.2f} GHz""")
-            st.write(f""" and FWHM {float(fwhm*30):.2f} GHz""")
+            st.write(f"Height, {fit_results.params[v+'height'].value:.2f} $\pm$ {fit_results.params[v+'height'].stderr:.2f}")
+            st.write(f"""Gaussian $\sigma={float(sigma)*29.9:.2f}$ GHz (Gaussian FWHM: {2.355*sigma*30:.2f}) and total FWHM {float(fwhm*30):.2f} $\pm$ {float(fwhm.stderr*30):.2f} GHz""")
 if fit_button:
     # make a finer grid to evaluate the fitted function over (instead of just the observed points)
-    x_finer = np.linspace(np.min(spec_data['Wavenumber']), np.max(spec_data['Wavenumber']), 1000)
+    x_finer = np.linspace(np.min(spectrum_data['Wavenumber']), np.max(spectrum_data['Wavenumber']), 1000)
 
     if fit_method_option == 'Simultaneously':
-        print_fit_results(line_fitting.fit_triple_voigt(spec_data, line1_pos, line2_pos, line3_pos,
+        print_fit_results(line_fitting.fit_triple_voigt(spectrum_data, line1_pos, line2_pos, line3_pos,
                                          gaussian_fwhm/(29.99*2.355),
                                          vary_gauss_component=(gaussian_fixed_flag == 'Variable')))
     else:
-        print_fit_results(line_fitting.fit_separate_voigts(spec_data,
+        print_fit_results(line_fitting.fit_separate_voigts(spectrum_data,
                          line1_pos, line2_pos, line3_pos, gaussian_fwhm/(29.99*2.355),
                          vary_gauss_component=(gaussian_fixed_flag == 'Variable')))
     
@@ -221,7 +222,7 @@ ______
 """
 
 show_meas_notes = st.radio("Do you want to look at the notes from your past measurements?",
-                           options=['Yes, please', 'No'])
+                           options=['No', 'Yes, please'])
 
 
 notes_file_path = '../notes/measurements/summary_key_measurements.md'
