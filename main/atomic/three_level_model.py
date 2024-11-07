@@ -13,14 +13,14 @@ plt.rcParams['figure.dpi'] = 150
 plt.rcParams['text.usetex'] = True
 plt.rcParams['font.family'] = 'serif'
 plt.rcParams['font.serif'] = ['Computer Modern']
-plt.rcParams['font.size'] = 13
+plt.rcParams['font.size'] = 14
 plt.rcParams['axes.formatter.useoffset'] = False
 
 
 E = 2.4E-9 # joules
 
 LASER_PULSE_DUR = 8E-9 # in secs
-LASER_REP_FREQ = 8_000 # Hz
+LASER_REP_FREQ = 7_999 # Hz; when I wrote 8_000 it showed 9 pulses in 1 ms. Needs small correction in the code
 LASER_SPOT_SIZE = 1E-6 # 1 mm^2
 
 LASER_FREQ = 28503.01 * c/100 # in Hz
@@ -65,10 +65,10 @@ def u(#omega:float, omega_L:float,
     return (E/(LASER_SPOT_SIZE*LASER_PULSE_DUR))*INTEGRATED_LASER_PROFILE*pulse_func(t)
 
 
-def calc_collision_rate(alpha, pressure, T):
+def calc_collision_rate(alpha, pressure_mbar, T):
     # assume ideal gas pV = NkT => N/V = p/kT
-    p = pressure*100 # convert mbar to pascals
-    num_density = pressure/(k*T) # per cubic metres
+    p = pressure_mbar*100 # convert mbar to pascals
+    num_density = pressure_mbar/(k*T) # per cubic metres
     # NOTE: Remember to convert from m^-3 to cm^-3
     alpha_cm3 = alpha*1E-6
     return alpha_cm3*num_density
@@ -78,45 +78,63 @@ def atomic_lineshape(omega_12):
     return 1
 
 
-step = 0
-def rate_equation_model(rho_vec, t, A21, A31, A23, alpha_31, g2, g1, omega_12):
-    global step
-    step += 1
-    total_steps = int(duration/step_size)
-    if step % 10000 == 0:
-        print(f'Calculating step {step}, {100*step/total_steps:.3f}% done')
+#step = 0
+
+def rate_equation_model(t, rho_vec, A21, A31, A23, alpha_31, g2, g1, omega_12):
+    #global step
+    #step += 1
+    #total_steps = int(duration/step_size)
+    #if step % 10000 == 0:
+    #    print(f'Calculating step {step}, {100*step/total_steps:.3f}% done')
     # for the sake of readability, I expand these
     rho_1, rho_2, rho_3 = rho_vec
     
     wavelength = c/(omega_12/(2*pi))
     
     abs_stim_term = (rho_2 - (g2/g1)*rho_1) * (A21*wavelength**2/(2*hbar*omega_12)) \
-                                                *u(t)*atomic_lineshape(omega_12)
+                                                *u(t)*atomic_lineshape(omega_12)/1e35
     drho1_dt = A21*rho_2 + A31*rho_3 \
                         + abs_stim_term \
                         + alpha_31*rho_3
     drho2_dt= -(A23 + A21)*rho_2 - abs_stim_term# ignore quenching from 2->3
     drho3_dt = A23*rho_2 -A31*rho_3 - alpha_31*rho_3
-    #print("Called!")
     return [drho1_dt, drho2_dt, drho3_dt]
 
 
-duration = 1.00001E-3
-step_size=1E-9
+num_pulses = 100
+duration = num_pulses * LASER_REP_FREQ
 
-t = np.linspace(0, duration, int(duration/step_size))
-
-laser_pulses = pulse_func(t)
+events = lambda t, rho, *args: np.sin((t - LASER_PULSE_DUR/2)*np.pi*LASER_REP_FREQ)
+events.terminal = False
+events.direction = 0
+t_pulses = np.arange(num_pulses) * 1/LASER_REP_FREQ
 J_u = 1
 J_l = 0
 alpha_31 = 1E-11
-collision_rate_buncher = calc_collision_rate(alpha_31, pressure=5E-2, T=300)# 
-
+collision_rate_buncher = calc_collision_rate(alpha_31, pressure_mbar=5E-2, T=300)# r
+rho0 = [1.0, 0.0, 0.0]
+rho_array = []
+t_array = []
+for t_start, t_end in zip(t_pulses[:-1], t_pulses[1:]):
+    rho = solve_ivp(rate_equation_model, (LASER_PULSE_DUR/10000, 1/LASER_REP_FREQ+LASER_PULSE_DUR/10000), rho0, method='LSODA', args=(
+                            1.21E7, # = A21
+                            3.6E-3, # = A31 NOTE: random value; assumes 1 hour lifetime of metastable
+                            1.88E7, # = A23
+                            collision_rate_buncher, 
+                            2*J_u + 1, # = g2
+                            2*J_l + 1, # = g1
+                            LASER_ANG_FREQ # = omega_12 NOTE: atomic resonance and laser freq need not be the same
+                ), rtol=1e-9, max_step=1e-7)
+    rho0 = rho.y[:,-1]
+    rho_array.append(rho.y)
+    t_array.extend(rho.t+t_start)
+rho1, rho2, rho3 = np.hstack(rho_array)
+t = np.array(t_array)
+'''
 rho1 = np.empty_like(t)
 rho2 = np.empty_like(t)
 rho3 = np.empty_like(t)
 
-rho0 = [1.0, 0.0, 0.0]
 rho1[0] = rho0[0]
 rho2[0] = rho0[1]
 rho3[0] = rho0[2]
@@ -136,7 +154,7 @@ for i in range(1,len(t)):
     rho2[i] = rho[1][1]
     rho3[i] = rho[1][2]
     rho0 = rho[1]
-
+'''
 
 '''result = solve_ivp(rate_equation_model,
                           t_span=[0, duration],
@@ -154,13 +172,16 @@ for i in range(1,len(t)):
                           ))'''
 
 
-fig, axes = plt.subplots(3, 1, figsize=(6,8))
+fig, axes = plt.subplots(3, 1, figsize=(6,8), sharex=True)
 
-
-axes[0].plot(t*1E3, rho1, ls='--', label=r'$\rho_1$')
-axes[1].plot(t*1E3, rho2, label=r'$\rho_2$')
-axes[2].plot(t*1E3, rho3, label=r'$\rho_3$')
-axes[2].plot(t*1E3, laser_pulses/1.25E8, c='orange', alpha=0.4, label='laser')
+rate_equation_model
+axes[0].plot(t*1E3, rho1, c='mediumpurple', ls='--', label=r'$\rho_1$')
+axes[1].plot(t*1E3, rho2, c='mediumpurple', ls='--', label=r'$\rho_2$')
+axes[2].plot(t*1E3, rho3, c='mediumpurple', ls='--', label=r'$\rho_3$')
+#axes[0].plot(t*1E3, rho1, c='mediumpurple', ls='--', label=r'$\rho_1$')
+#axes[1].plot(t*1E3, rho2, c='mediumpurple', ls='--', label=r'$\rho_2$')
+#axes[2].plot(t*1E3, rho3, c='mediumpurple', ls='--', label=r'$\rho_3$')
+axes[2].plot(t*1E3, pulse_func(t)/1.25E8, 'tab:green', alpha=0.4, label='laser')
 
 axes[0].set_ylabel(r'$\rho_1$')
 axes[1].set_ylabel(r'$\rho_2$')
@@ -170,4 +191,8 @@ for ax in axes:
     ax.legend()
 
 plt.tight_layout()
+plt.scatter(t*1E3, np.zeros_like(t))
+#plt.scatter(rho.t_events[0]*1E3, np.zeros_like(rho.t_events[0]), marker='x')
+#plt.xlim(-4e8, 4e-8)
+plt.show()
 plt.savefig('three_level_solution.png', dpi=300)
