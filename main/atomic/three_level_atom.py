@@ -168,7 +168,7 @@ def rate_equations(t_mus, rho_vec, A21, A31, A23, alpha_31, g2, g1, omega_12, om
     The rate equations are as derived in eqn. 3.7 to 3.9 in Aayush's master thesis.
     """
     rho_1, rho_2, rho_3 = rho_vec
-    t = t_mus/1e12#/1e6#/1e15
+    t = t_mus#/1e12#/1e6#/1e15
     #print("Evaluating at t=",t)
     #print("Beginning evaluation of the derivatives")
     omega_12 = omega_12.to('Hz', equivalencies=[(u.cy/u.s, u.Hz)]).value
@@ -203,7 +203,7 @@ def rate_equations(t_mus, rho_vec, A21, A31, A23, alpha_31, g2, g1, omega_12, om
         #print("drho_3 too large:", drho3_dt)
         #print("at t", t%(1/LASER_REP_FREQ.to('Hz').value))
     #print("No issues including collision rates\n Finished calculating rate eq derivatives")
-    return np.array([drho1_dt, drho2_dt, drho3_dt])/1e12
+    return np.array([drho1_dt, drho2_dt, drho3_dt])#/1e12
 
 NUM_PULSES = 10 #+ 0.001/50
 tau = LASER_PULSE_DUR.to('s').value
@@ -244,7 +244,7 @@ for n in range(NUM_PULSES):
     t_no_pulse =  np.array([
                         t_dur + h, time_between_pulses + h,
         ]) + n*time_between_pulses
-    max_step_sizes = [1e2, 1e6]
+    #max_step_sizes = [1e2, 1e6]
 
 
 
@@ -255,7 +255,7 @@ for n in range(NUM_PULSES):
         #events.terminal = False
         #events.direction = 0
         rho = solve_ivp(rate_equations,
-                    t_span=(start*1e12, end*1e12), # t_span
+                    t_span=(start, end), # t_span
                     y0=rho0,
                     method='LSODA',
                     args=(A21, A31, A23,
@@ -284,7 +284,7 @@ for n in range(NUM_PULSES):
         print("Values of t in the solution", rho.t)
         #print("")
         ax.legend()'''
-        t_array = np.append(t_array, rho.t/1e12, axis=0)
+        t_array = np.append(t_array, rho.t, axis=0)
         #plt.show()
         #break
 
@@ -311,7 +311,7 @@ t_all = np.linspace(0, NUM_PULSES*(1/LASER_REP_FREQ.to('Hz').value), 1000000)
 axes[2].plot(t_all*1E6, pulse_func(t_all)/1.25E8, 'tab:pink',label='laser')
 axes[2].plot(t*1E6, pulse_func(t)/1.25E8, 'tab:green', label='laser')
 for ax in axes:
-    ax.set_xlabel('Time [ms]')
+    ax.set_xlabel('Time [$\mu$s]')
     ax.grid()
     ax.legend()
     #ax.set_xscale('log')
