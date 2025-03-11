@@ -23,7 +23,7 @@ Note that the relation betweeen A_21 and B_21 coefficients depends on the defini
 of laser intensity/energy density chosen.
 """
 
-ENERGY_PER_PULSE = 2.4 * u.nJ
+ENERGY_PER_PULSE = 2.4E-9 * u.J / 1e6
 # TODO: OD filters
 
 LASER_PULSE_DUR = 8 * u.ns
@@ -35,7 +35,7 @@ OMEGA_12 = RESONANCE_FREQ * u.cycle
 LASER_FWHM_GAUSS = 4.6E9 * u.Hz # NOTE: u.GHz wasn't doing the right thing
 
 # TODO: this is just for testing.
-OMEGA_L = OMEGA_12 
+OMEGA_L = OMEGA_12
 T = 300 * u.K
 M_175 = 175 * m_p # Lu-175
 
@@ -174,18 +174,26 @@ def rate_equations(t_mus, rho_vec, A21, A31, A23, alpha_31, g2, g1, omega_12, om
     omega_12 = omega_12.to('Hz', equivalencies=[(u.cy/u.s, u.Hz)]).value
     omega_L = omega_L.to('Hz', equivalencies=[(u.cy/u.s, u.Hz)]).value
     # absorption - stimulated emission (multiplied by energy density, integrated lineshape function etc.)
-    abs_stim_term  = (rho_2 - (g2/g1)*rho_1)*A21*pulse_func(t) *np.sum(S_factor(omega_12[0], omega_L[0], alpha_31))
+    abs_stim_term = (rho_2 - (g2/g1)*rho_1)*A21*pulse_func(t) *np.sum(S_factor(omega_12[0], omega_L[0], alpha_31))
     # If there are multiple hyperfine multiplets, the location of the resonance omega_12 is an array,
     # and each of those has an associated S-factor. The sum over all these S-factors is taken to take into account
     # pumping neighbouring hyperfine levels at the same time.
+    if np.abs(abs_stim_term) > 1e10: # if the value is too large, it's already saturated
+        r = np.rint(np.log10(np.abs(abs_stim_term))) - 10
+        '''print("Value of abs_stim_term too large:", abs_stim_term)
+        print("Rescaling by 1e",r )'''
+        abs_stim_term /= 10**r
+        # for numerical safety, cap it here. It's not going to change the solution as A21+A23 ~10^7 << 10^10
+        #exit()
     #print("Unit of S-factor:", S_factor(t, omega_12, omega_L, alpha_31))
     #print("No crashes until evaluation of absorption/stimulated emission")
     # the derivatives
     
+    #print("Value of absorption term", abs_stim_term)
     drho1_dt = A21*rho_2 + A31*rho_3 \
                 + abs_stim_term \
                 #+ alpha_31*rho_3 # collisional de-excitation from metastable
-    print("Value of derivative 1", drho1_dt)
+    #print("Value of derivative 1", drho1_dt)
     drho2_dt = -(A21 + A23)*rho_2 - abs_stim_term # de-excitation from 2->3 has been neglected
     #print("Successfully evaluated first two derivatives")
     drho3_dt =  A23*rho_2 - (A31 )*rho_3#+ alpha_31
@@ -197,7 +205,7 @@ def rate_equations(t_mus, rho_vec, A21, A31, A23, alpha_31, g2, g1, omega_12, om
     #print("No issues including collision rates\n Finished calculating rate eq derivatives")
     return np.array([drho1_dt, drho2_dt, drho3_dt])/1e12
 
-NUM_PULSES = 2 #+ 0.001/50
+NUM_PULSES = 10 #+ 0.001/50
 tau = LASER_PULSE_DUR.to('s').value
 f = LASER_REP_FREQ.to('Hz').value
 events = lambda t, rho, *args: np.sin((t-tau/2)*np.pi*(f))
@@ -224,7 +232,7 @@ rho_array = np.array([rho0])
 t_array = [0.]
 print("Initializing solution of rate equations")
 
-markers = []
+
 for n in range(NUM_PULSES):
     t_dur = 1*LASER_PULSE_DUR.to('s').value
     h = t_dur/10_000 # a very small quantity
@@ -243,42 +251,47 @@ for n in range(NUM_PULSES):
     # now integrate the rate equations for each of these slices
     for i, (start, end) in enumerate([t_with_pulse, t_no_pulse]):
         #events = lambda t, rho, *args: np.sin((t-(end-start-2*h)/2)*np.pi*(f))
-        events = lambda t, rho, *args: np.sin(np.pi*(t-start)/(end-start)) - 1e-8
-        events.terminal = False
-        events.direction = 0
-        markers.append(start)
-        markers.append(end)
-        print("For pulse number", n, "integrating from", start, "fs to", end)
-        if i == 0:
-            print("Taking step at t=", start/1E12, "fs")
+        #events = lambda t, rho, *args: np.sin(np.pi*(t-start)/(end-start)) - 1e-8
+        #events.terminal = False
+        #events.direction = 0
         rho = solve_ivp(rate_equations,
                     t_span=(start*1e12, end*1e12), # t_span
                     y0=rho0,
-                    method='BDF',
+                    method='LSODA',
                     args=(A21, A31, A23,
                     inelastic_collision_rate(p_buncher).to('1/s').value, # NOTE: this will evaluate the collisions in the bunhcer only
                     g_u,
                     g_l,
                     OMEGA_12,
                     OMEGA_L),
-                    atol = 1e-12,
-                    rtol=1e-10,
-                    init_step=1e0,
-                    #max_step=1e4,
+                    atol = 1e-7,
+                    #rtol=1e-7,
+                    #init_step=1e0,
+                    #max_step=1e12/1e6,
                     #events=events,
                     #max_step=max_step_sizes[i],
             )
         rho0 = rho.y[:,-1]
-        print(rho.y.shape)
+        #print(rho.y)
         rho_array = np.append(rho_array, rho.y.T, axis=0)
+        '''fig, ax = plt.subplots()
+        ax.plot(rho.t/1e3, rho.y.T, label=['rho1', 'rho2', 'rho3'])
+        ax.plot(rho.t/1e3, pulse_func(rho.t/1e12)/1.25E8, 'k', ls='--', label='laser')
+        if rho.t_events is not None:
+            ax.scatter(rho.t_events[0], np.zeros_like(rho.t_events[0]), marker='x')
+        ax.scatter(rho.t/1e3, np.zeros_like(rho.t), alpha=0.1)
         print(rho_array.shape)
         print("Values of t in the solution", rho.t)
+        #print("")
+        ax.legend()'''
         t_array = np.append(t_array, rho.t/1e12, axis=0)
+        #plt.show()
+        #break
 
 print("Succesfully integrated rate equations for", NUM_PULSES, "laser pulses")
 #rho1, rho2, rho3 = np.hstack(rho_array)
 t = np.array(t_array)
-print("Values in t_array", t/1E-6)
+#print("Values in t_array", t/1E-6)
 fig, axes = plt.subplots(3, 1, figsize=(6,8), sharex=True)
 
 #rate_equation_model
@@ -297,8 +310,6 @@ axes[2].set_ylabel(r'$\rho_3$')
 t_all = np.linspace(0, NUM_PULSES*(1/LASER_REP_FREQ.to('Hz').value), 1000000)
 axes[2].plot(t_all*1E6, pulse_func(t_all)/1.25E8, 'tab:pink',label='laser')
 axes[2].plot(t*1E6, pulse_func(t)/1.25E8, 'tab:green', label='laser')
-for m in markers:
-    axes[2].axvline(m*1E6, c='gray', ls='--', alpha=0.5)
 for ax in axes:
     ax.set_xlabel('Time [ms]')
     ax.grid()
