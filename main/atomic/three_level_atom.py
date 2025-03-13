@@ -1,5 +1,5 @@
 from astropy.constants import c, hbar, k_B, m_p
-from scipy.integrate import odeint, quad, solve_ivp
+from scipy.integrate import quad, solve_ivp
 from scipy.special import voigt_profile
 from functools import lru_cache
 from sympy.physics.wigner import wigner_6j
@@ -11,6 +11,11 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 
 mpl.rcParams['axes.formatter.useoffset'] = False
+plt.rcParams['figure.dpi'] = 150
+plt.rcParams['text.usetex'] = True
+plt.rcParams['font.family'] = 'serif'
+plt.rcParams['font.serif'] = ['Computer Modern']
+plt.rcParams['font.size'] = 13
 
 """
 The important thing is to use astropy.units as it's easy to get a factor of \hbar or c wrong
@@ -23,23 +28,26 @@ Note that the relation betweeen A_21 and B_21 coefficients depends on the defini
 of laser intensity/energy density chosen.
 """
 
-ENERGY_PER_PULSE = 2.4E-9 * u.J / 1e6
+# NOTE: Something is off; I need to suppress the intensity by *quite a lot* to not get flat top profiles
+ENERGY_PER_PULSE = 2.4E-9 * u.J / 1e10
 # TODO: OD filters
 
 BUNCHER_FREQ = 1000 * u.Hz
-LASER_PULSE_DUR = 8 * u.ns
+LASER_PULSE_DUR = 8E-9 * u.s
 LASER_SPOT_SIZE = 1.5 * u.mm**2
 
 LASER_REP_FREQ = 8000 * u.Hz
-RESONANCE_FREQ = (np.array([28502.3, 28503.06, 28503.7]) / u.cm).to('Hz', equivalencies=u.spectral())
+RESONANCE_FREQ = (np.array([28502.3, 28503.01, 28503.7]) / u.cm).to('Hz', equivalencies=u.spectral())
 OMEGA_12 = RESONANCE_FREQ * u.cycle
 LASER_FWHM_GAUSS = 4.6E9 * u.Hz # NOTE: u.GHz wasn't doing the right thing
 
+# TODO: this is just for testing.
+#OMEGA_L = OMEGA_12 #- (20E9 * u.Hz * u.cycle)
 T = 300 * u.K
 M_175 = 175 * m_p # Lu-175
 
 DOPPLER_WIDTH_SIGMA = ((OMEGA_12 / c) * np.sqrt(k_B * T / M_175))
-NUCLEAR_SPIN = 7/2 
+NUCLEAR_SPIN = 7/2
 # to convert freq to angular freq, multiply by u.cycle
 # to get Hz back WITHOUT the 2pi factor, use .to('Hz', equivalencies=[(u.cy/u.s, u.Hz)])
 # else, equivalencies=u.dimensionless_angles()
@@ -54,30 +62,34 @@ A31 = 1E-2 #/ u.s # NOTE: this is random value
 p_buncher = 2.5E-2 * u.mbar
 p_DT = 3 * u.mbar
 
+@lru_cache
 def A_FF(A_J, J_u, J_l, F_u, F_l, I):
     """
     The Einstein A_21 coefficient for a hyperfine transition from F' -> F
     in terms of A_21 coefficient for the fine structure transition.
     This takes care of the Clebsch-Gordon coefficients/Wigner nj symbols 
     """
-    return (2*F_l + 1)*(2*F_u + 1) * wigner_6j(J_l, I, F_l, F_u, J_l, J_u)**2 * A_J
+    #TODO: double check the prefactors.
+    return (2*F_l + 1)*(2*F_u + 1) * wigner_6j(J_l, I, F_l, F_u, 1, J_u)**2 * A_J
 
 #@lru_cache
-def pulse_func(t: float, tau_pulse=LASER_PULSE_DUR, f_rep=LASER_REP_FREQ):
+def pulse_func(t: float, tau_pulse=LASER_PULSE_DUR, f_rep=LASER_REP_FREQ,
+                buncher_cycle_duration=1/BUNCHER_FREQ):
     """
     A function that mimics a laser pulse of a certain duration
     While satisfying the property that area under the curve for each rectangular pulse is 1
     """
     # separation between each pulse in ns
     pulse_sep = (1/f_rep).to('s').value
-    
-    height = 1/tau_pulse.to('s').value # such that height*width = 1
-    #print("Evaluating pulse function")
-    return np.where( (t % pulse_sep) < tau_pulse.to('s').value, height, 0)
-
+    # such that height*width = 1
+    height = 1/tau_pulse.to('s').value 
+    # flag whether this time 't' is within the buncher cycle duration, or after
+    # (there's no radiation after leaving buncher)
+    t_within_buncher = np.where(t < buncher_cycle_duration.to('s').value, 1, 0)
+    return t_within_buncher * np.where(((t % pulse_sep) < tau_pulse.to('s').value), height, 0)
 
 #@lru_cache
-def laser_energy_density(omega, omega_L):
+def laser_energy_density(omega, omega_L, per_pulse_energy):
     """
     Centered at laser wavelength (and varies at each point of the laser scan).
     Independent of the atomic line frequency.
@@ -91,12 +103,9 @@ def laser_energy_density(omega, omega_L):
     if isinstance(omega_L, u.Quantity):
         omega_L = omega_L.to('Hz', equivalencies=[(u.cy/u.s, u.Hz)]).value
     # convert to 1 sigma from FWHM
-    sigma = (LASER_FWHM_GAUSS / 2.355).to('Hz').value
-    # the ions never stay longer than 1 buncher cycle duration. The amount of energy deposited
-    # is limited by that. TODO: Decide what to do here
-    num_pulses = (1/LASER_REP_FREQ).value# /np.min(1., BUNCHER_FREQ)
-    integrated_energy_density = ENERGY_PER_PULSE*num_pulses/(c*LASER_SPOT_SIZE)
-    return integrated_energy_density * np.exp(-(omega - omega_L)**2 / (2*sigma**2))
+    laser_sigma = (LASER_FWHM_GAUSS / 2.355).to('Hz').value
+    integrated_energy_density = per_pulse_energy*LASER_REP_FREQ.value/(c*LASER_SPOT_SIZE)
+    return integrated_energy_density * np.exp(-(omega - omega_L)**2 / (2*laser_sigma**2))
 
 print("Note: Collisional broadening has been ignored.")
 #@lru_cache
@@ -112,11 +121,11 @@ def atomic_lineshape(omega, omega_21, collision_rates, sigma_doppler):
     if isinstance(omega_21, u.Quantity):
         omega_21 = omega_21.to('Hz', equivalencies=[(u.cy/u.s, u.Hz)]).value
     if isinstance(sigma_doppler, u.Quantity):
-        sigma_doppler = sigma_doppler.to("Hz").value
-    #sigma_doppler = sigma_doppler.to('Hz', equivalencies=[(u.cy/u.s, u.Hz)]).value
+        sigma_doppler = sigma_doppler.to('Hz', equivalencies=[(u.cy/u.s, u.Hz)]).value
     # NOTE: the collision broadening should include both elastic and inelastic collision rates
     # Here, what I've included is only the inelastic part.
-    #gamma = 2*collision_rates
+    gamma = 2*collision_rates
+    #print("Collision rates", collision_rates)
     #d = # diameter of atoms
     #mean_collision_time = (1/(n_He * d**2))*np.sqrt(M_175/(16*np.pi * k_B *T))
     #gamma = 2/mean_collision_time  
@@ -126,24 +135,47 @@ def atomic_lineshape(omega, omega_21, collision_rates, sigma_doppler):
     #phi = lambda omega: voigt_profile(omega-omega_res, sigma_doppler, gamma)
     #gamma = 1
     #print("evaluating atomic lineshape")
+    #sigma_doppler = 100_000_000
     phi = scipy.stats.norm(loc=omega_21, scale=sigma_doppler)
+    #return np.exp(-(omega-omega_21)/(2*(sigma_doppler**2)))
     return phi.pdf(omega)#.value
 
 @lru_cache
-def S_factor(omega_12, omega_L, doppler_sigma, collision_rates):
+def S_factor(omega_12, omega_L, energy_per_pulse, collision_rates, doppler_sigma):
     """
     The arguments of this method had to be dimensionless to be cache-able
     """
     combined_lineshape = lambda omega: (atomic_lineshape(omega, omega_12, collision_rates, doppler_sigma)\
-                                        *laser_energy_density(omega, omega_L))#.value
+                                        *laser_energy_density(omega, omega_L, energy_per_pulse))#.value
     units = combined_lineshape(omega_12).unit
     # for integrating with scipy
     dimless_lineshape = lambda omega: combined_lineshape(omega).value
     # NOTE: the integral shouldn't be done from 0, np.inf because the numerical step size would not
     # resolve the lineshape at all.
+    #print(omega_12, omega_L, LASER_FWHM_GAUSS)
+    #print(dimless_lineshape(864e14))
+    #lower = 
+    #upper = np.max([omega_12, omega_L])
+    '''omega = np.linspace(np.min([omega_12, omega_L]) - 5*LASER_FWHM_GAUSS.value,
+                        np.max([omega_12, omega_L]) + 5*LASER_FWHM_GAUSS.value,
+                        100000000)
+    lineshape = dimless_lineshape(omega)'''
+    #print(lineshape)
+    #int_lineshape = np.trapz(omega, lineshape)
     int_lineshape = quad(dimless_lineshape,
                         np.min([omega_12, omega_L]) - 5*LASER_FWHM_GAUSS.value,
-                        np.max([omega_12, omega_L]) + 5*LASER_FWHM_GAUSS.value
+                        np.max([omega_12, omega_L]) + 5*LASER_FWHM_GAUSS.value,
+                        #method='tanh-sinh',
+                        #maxdegree=100,
+                        #n=10000000,
+                        #tol=1e-12,
+                        #rtol=1e-12
+                        #n=1
+                        #limit=10000000,
+                        #rtol=1e-10,
+                        #tol=1e-10
+                        #epsrel=1e-12,
+                        #epsabs=1e-12
                     )[0]
     #print("Value of integrated lineshape", int_lineshape)
     omega_12 *= 2*np.pi #.to('Hz', equivalencies=u.dimensionless_angles())
@@ -151,12 +183,14 @@ def S_factor(omega_12, omega_L, doppler_sigma, collision_rates):
     # the value will be wrong by 8pi^3. I first tried doing this dynamically
     # But then the cache would not work because the arguments were not dimensionless
     # so a unit in 'Hz' is passed to the arguments, without the 2pi factor
-    return (((np.pi**2 * c**3)/(hbar*omega_12**3)) * int_lineshape * units).si.value
+    return int_lineshape * (((np.pi**2 * c**3)/(hbar*omega_12**3)) * units).si.value
 
 
 '''omega = np.linspace(OMEGA_12.value - 5*LASER_FWHM_GAUSS.value, OMEGA_12.value + 5*LASER_FWHM_GAUSS.value, 100) * u.cycle * u.Hz
 #print("Value of S-factor", S_factor(1, OMEGA_12, OMEGA_L, A31))
-S = [S_factor(OMEGA_12, o, A31) for o in omega]
+S = []
+for o in omega:
+    S.append(S_factor(OMEGA_12[1].value, o[0].value, ENERGY_PER_PULSE, A31, DOPPLER_WIDTH_SIGMA[1].value))
 fig, ax = plt.subplots(figsize=(6,6))
 half_max = np.max(S)/2
 ax.plot((omega-OMEGA_12)/1E9, S)
@@ -167,51 +201,50 @@ print("Width of it", 2.355*np.std(S)/1E9)
 plt.show()'''
 
 
-def rate_equations(t_mus, rho_vec, A21, A31, A23, alpha_31, g2, g1, omega_12, omega_L):
+def rate_equations(t, rho_vec, A21, A31, A23, energy_per_pulse, alpha_31,
+                    g2, g1, F2, F1, I, J_u, J_l,
+                    omega_12, omega_L):
     """
     The rate equations are as derived in eqn. 3.7 to 3.9 in Aayush's master thesis.
     """
     rho_1, rho_2, rho_3 = rho_vec
-    t = t_mus#/1e12#/1e6#/1e15
-    #print("Evaluating at t=",t)
-    #print("Beginning evaluation of the derivatives")
     omega_12 = omega_12.to('Hz', equivalencies=[(u.cy/u.s, u.Hz)]).value
     omega_L = omega_L.to('Hz', equivalencies=[(u.cy/u.s, u.Hz)]).value
-    S_factors = 0.
+    doppler_widths = DOPPLER_WIDTH_SIGMA.to('Hz', equivalencies=[(u.cy/u.s, u.Hz)]).value
+
+    # absorption - stimulated emission (multiplied by energy density, integrated lineshape function etc.)
+    abs_stim_term = 0.
     # If there are multiple hyperfine multiplets, the location of the resonance omega_12 is an array,
     # and each of those has an associated S-factor. The sum over all these S-factors is taken to take into account
     # pumping neighbouring hyperfine levels at the same time.
-    for omega_F, d_omega in zip(omega_12, DOPPLER_WIDTH_SIGMA):
-        S_factors += S_factor(omega_F, omega_L, alpha_31, d_omega)
-    # absorption - stimulated emission (multiplied by energy density, integrated lineshape function etc.)
-    abs_stim_term = (rho_2 - (g2/g1)*rho_1)*A21*pulse_func(t) + S_factors
-
+    #A_sum = 0.
+    for i in range(len(omega_12)):
+        abs_stim_term += (rho_2 - (g2[i]/g1[i])*rho_1) \
+                            *S_factor(omega_12[i], omega_L, energy_per_pulse, alpha_31, doppler_widths[i]) \
+                            * A21 \
+                            *pulse_func(t) 
+        #print(f"Is A(F'->F) = A21 for {F2[i]} -> {F1[i]}",
+        #                A21, A_FF(A21, J_u, J_l, F2[i], F1[i], I))
+        #A_sum += A_FF(A21, J_u, J_l, F2[i], F1[i], I)
+    #print("Sum of A_FF and A_21", A_sum, A21)
+    #exit
     if np.abs(abs_stim_term) > 1e10: # if the value is too large, it's already saturated
         r = np.rint(np.log10(np.abs(abs_stim_term))) - 10
-        # for numerical safety, cap it here. It's not going to change the solution as A21+A23 ~10^7 << 10^10
         abs_stim_term /= 10**r
-        #exit()
-    #print("Unit of S-factor:", S_factor(t, omega_12, omega_L, alpha_31))
+        # for numerical safety, cap it here. It's not going to change the solution as A21+A23 ~10^7 << 10^10
+
     #print("No crashes until evaluation of absorption/stimulated emission")
-    # the derivatives
-    
-    #print("Value of absorption term", abs_stim_term)
+
+    # the derivatives in the rate equation
     drho1_dt = A21*rho_2 + A31*rho_3 \
                 + abs_stim_term \
-                #+ alpha_31*rho_3 # collisional de-excitation from metastable
-    #print("Value of derivative 1", drho1_dt)
+                + alpha_31*rho_3 # collisional de-excitation from metastable
     drho2_dt = -(A21 + A23)*rho_2 - abs_stim_term # de-excitation from 2->3 has been neglected
     #print("Successfully evaluated first two derivatives")
-    drho3_dt =  A23*rho_2 - (A31 )*rho_3#+ alpha_31
-    #print("The value of A31*rho_3", A31*rho_3)
-    if drho3_dt < -1:
-        pass
-        #print("drho_3 too large:", drho3_dt)
-        #print("at t", t%(1/LASER_REP_FREQ.to('Hz').value))
-    #print("No issues including collision rates\n Finished calculating rate eq derivatives")
+    drho3_dt =  A23*rho_2 - (A31 + alpha_31)*rho_3
     return np.array([drho1_dt, drho2_dt, drho3_dt])#/1e12
 
-NUM_PULSES = round((LASER_REP_FREQ / BUNCHER_FREQ).value) #+ 0.001/50
+NUM_PULSES = round((LASER_REP_FREQ/BUNCHER_FREQ).value) #+ 0.001/50
 tau = LASER_PULSE_DUR.to('s').value
 f = LASER_REP_FREQ.to('Hz').value
 events = lambda t, rho, *args: np.sin((t-tau/2)*np.pi*(f))
@@ -220,25 +253,27 @@ events.direction = 1
 
 t_pulses = np.arange(NUM_PULSES) / LASER_REP_FREQ.value
 
-F_u = 1 + NUCLEAR_SPIN
-F_l = 0 + NUCLEAR_SPIN
+J_u = 1
+J_l = 0
+F_u = np.array([-1, 0, 1]) + NUCLEAR_SPIN
+F_l = np.zeros_like(F_u) + NUCLEAR_SPIN
 
 g_u = 2*F_u + 1
 g_l = 2*F_l + 1
 
 # assumed as per Kim et al (2024)
-rate_coefficient = 1E-11 * u.cm**3 / u.s # 
+rate_coefficient = 1E-14 * u.cm**3 / u.s # 
 # P is the pressure (in DT or buncher, wherever you want to use this)
 inelastic_collision_rate = lambda P: (rate_coefficient * P/(k_B * T)).to("1/s")
-print("Initializing solution of rate equations")
 
 
-def calculate_populations(omega_L):
+def calc_populations(omega_L, energy_per_pulse, arrival_time_gs):
     # initial level populations.
     rho0 = [1.0, 0.0, 0.0]
     # and variables to store the full solution
     rho_array = np.array([rho0])
     t_array = [0.]
+    print("Initializing solution of rate equations")
     for n in range(NUM_PULSES):
         t_dur = 1*LASER_PULSE_DUR.to('s').value
         h = t_dur/10_000 # a very small quantity
@@ -252,6 +287,8 @@ def calculate_populations(omega_L):
             ]) + n*time_between_pulses
         #max_step_sizes = [1e2, 1e6]
 
+
+
         # now integrate the rate equations for each of these slices
         for i, (start, end) in enumerate([t_with_pulse, t_no_pulse]):
             #events = lambda t, rho, *args: np.sin((t-(end-start-2*h)/2)*np.pi*(f))
@@ -263,9 +300,10 @@ def calculate_populations(omega_L):
                         y0=rho0,
                         method='LSODA',
                         args=(A21, A31, A23,
+                        energy_per_pulse,
                         inelastic_collision_rate(p_buncher).to('1/s').value, # NOTE: this will evaluate the collisions in the bunhcer only
                         g_u,
-                        g_l,
+                        g_l, F_u, F_l, NUCLEAR_SPIN, J_u, J_l, 
                         OMEGA_12,
                         omega_L),
                         atol = 1e-7,
@@ -291,17 +329,41 @@ def calculate_populations(omega_L):
             t_array = np.append(t_array, rho.t, axis=0)
             #plt.show()
             #break
+        
+    # now, the "optical pumping" is done. Let's evolve the system in the drift tube
+    # where pressure is higher, until they arrive at the detector
+    t_buncher = (1/BUNCHER_FREQ).to('s').value
+    if isinstance(arrival_time_gs, u.Quantity):
+        arrival_time_gs = arrival_time_gs.to('s').value
+    rho = solve_ivp(rate_equations,
+                        t_span=(t_buncher, t_buncher + arrival_time_gs), # t_span
+                        y0=rho0,
+                        method='LSODA',
+                        args=(A21, A31, A23,
+                        energy_per_pulse,
+                        # use the collision rate appropriate for the DT
+                        inelastic_collision_rate(p_DT).to('1/s').value,
+                        g_u,
+                        g_l, F_u, F_l, NUCLEAR_SPIN, J_u, J_l, 
+                        OMEGA_12,
+                        omega_L),
+                        atol = 1e-7,
+                )
+    rho_array = np.append(rho_array, rho.y.T, axis=0)
+    t_array = np.append(t_array, rho.t, axis=0)
 
-    print("Succesfully integrated rate equations for", NUM_PULSES, "laser pulses at wavenumber",
-                         (omega_L/u.cycle).to('1/cm', equivalencies=u.spectral()))
-    #rho1, rho2, rho3 = np.hstack(rho_array)
-    return np.array(t_array), rho_array
+    # and NOW we're done!
+    print("Successfully integrated rate equations for", NUM_PULSES, "laser pulses at wavenum",
+          (omega_L/u.cycle).to("1/cm", equivalencies=u.spectral()))
+    
+    t = np.array(t_array)
+    return t, rho_array
     #print("Values in t_array", t/1E-6)
 
 
-
-def plot_optical_pumping(rho_array, t):
+def plot_populations(t, rho_array):
     fig, axes = plt.subplots(3, 1, figsize=(6,8), sharex=True)
+
     #rate_equation_model
     #print("The values of rho_array", rho_array)
     axes[0].plot(t*1E6, rho_array[:,0], c='mediumpurple', ls='--', label=r'$\rho_1$')
@@ -316,9 +378,28 @@ def plot_optical_pumping(rho_array, t):
     axes[2].set_ylabel(r'$\rho_3$')
 
     t_all = np.linspace(0, NUM_PULSES*(1/LASER_REP_FREQ.to('Hz').value), 1000000)
-    axes[2].plot(t_all*1E6, pulse_func(t_all)/1.25E8, 'tab:pink',label='laser')
-    axes[2].plot(t*1E6, pulse_func(t)/1.25E8, 'tab:green', label='laser')
-    for ax in axes:
+    max_ms = np.max(rho_array[:,2])
+    #axes[2].plot(t_all*1E6, pulse_func(t_all)/1.25E8*max_ms, 'tab:pink',label='laser')
+    axes[2].plot(t*1E6, pulse_func(t)/1.25E8*max_ms, 'tab:green', label='laser', alpha=0.5)
+
+    # shade the part of the time spend in the drift tube
+    t_buncher = (1/BUNCHER_FREQ).to('us').value # the plot is in microseconds
+    t_DT = np.linspace(t_buncher, t[-1]*1E6, 100)
+    axes[1].text(x=t_DT[50], y=np.max(rho_array[:,1])/2, s=r"\textsc{Drift Tube}", c='dimgray',
+                     va='center', ha='center')
+    
+    # some characteristics
+    axes[0].set_title(
+        # the He-Lu^+ inelastic collision rate coefficient (at 300K)
+        r"$\alpha_{31}=$" + f'{rate_coefficient.to("cm3 / s").value:.1e}' +" cm$^{3}/$s"
+        + ",\quad" # 
+        + "$p(\mathrm{DT})=" + f"{p_DT.to('mbar').value:.1f}" + "$ mbar")
+    for i, ax in enumerate(axes):
+        shade_ymin = np.zeros_like(t_DT)
+        shade_ymax = np.max(rho_array[:,i])*np.ones_like(t_DT)
+
+        ax.fill_between(t_DT, shade_ymin, shade_ymax, alpha=0.5, fc='silver')
+        ax.axvline(x=t_buncher, ymin=0, ymax=1, c='gray', ls='--', lw=1)
         ax.set_xlabel('Time [$\mu$s]')
         ax.grid()
         ax.legend()
@@ -332,28 +413,24 @@ def plot_optical_pumping(rho_array, t):
     plt.savefig('three_level_solution.png', dpi=300)
 
 
-def omega_L_cm(om):
-    """
-    Take laser frequency in 1/cm and convert to Hz
-    """
-    return om.to('Hz', equivalencies=u.spectral()) * u.cycle
+ARRIVAL_TIME_GS = 350 * u.us # microseconds
+wavenum_range = np.linspace(28501.5, 28504.5, 80) / u.cm
+omega_laser = lambda wavenum: wavenum.to('Hz', equivalencies=u.spectral()) * u.cycle
+#omega_L = OMEGA_12 #- (15E9 * u.cycle * u.Hz)
 
-
-if __name__ == "__main__":
-    # TODO: this is just for testing.
-    #OMEGA_L = 28503.01 / u.cm
-    #t, rho_array = calculate_populations(omega_L_cm(OMEGA_L))
-    laser_scan_wavenum = np.arange(28500, 28510, 0.5) / u.cm
-    # metastable population as a function of laser frequency
-    rho3_scan = []
-    for omega_laser in omega_L_cm(laser_scan_wavenum):
-        t, rho_array = calculate_populations(omega_laser)
-        #print(rho_array.shape)
-        rho3_scan.append(rho_array[-1, -1])
-        #plot_optical_pumping(rho_array, t)
-        #break
-    #rho_array, t = calculate_populations(omega_L)
-    #plot_optical_pumping(rho_array, t)
-    fig, ax = plt.subplots(figsize=(6,6))
-    ax.plot(laser_scan_wavenum, rho3_scan)
-    plt.show()
+energies = ENERGY_PER_PULSE*np.logspace(-4, 0, 5)
+ms_final = []
+rho_all = []
+t_all = []
+for per_pulse_energy in energies:
+    ms_this_wavenum = []
+    for omega_L in omega_laser(wavenum_range):
+        t, rho_array = calc_populations(omega_L, per_pulse_energy, ARRIVAL_TIME_GS)
+        ms_this_wavenum.append(rho_array[-1, 2])
+    ms_final.append(ms_this_wavenum)
+    rho_all.append(rho_array)
+    #plot_populations(t, rho_array)
+ms_final = np.array(ms_final)
+fig, ax = plt.subplots()
+ax.plot(wavenum_range, ms_this_wavenum)
+plt.show()
