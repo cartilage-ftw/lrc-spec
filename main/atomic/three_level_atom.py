@@ -3,7 +3,10 @@ from scipy.integrate import quad, solve_ivp
 from scipy.special import voigt_profile
 from functools import lru_cache
 from sympy.physics.wigner import wigner_6j
+from pathos.multiprocessing import ProcessingPool
 
+import multiprocessing as mp
+import time
 import numpy as np
 import astropy.units as u
 import scipy.stats
@@ -16,6 +19,9 @@ plt.rcParams['text.usetex'] = True
 plt.rcParams['font.family'] = 'serif'
 plt.rcParams['font.serif'] = ['Computer Modern']
 plt.rcParams['font.size'] = 13
+
+# to later use all CPU cores using `pathos`
+num_cores = mp.cpu_count()
 
 """
 The important thing is to use astropy.units as it's easy to get a factor of \hbar or c wrong
@@ -60,7 +66,7 @@ A31 = 1E-2 #/ u.s # NOTE: this is random value
 
 
 p_buncher = 2.5E-2 * u.mbar
-p_DT = 3 * u.mbar
+p_DT = 5 * u.mbar
 
 @lru_cache
 def A_FF(A_J, J_u, J_l, F_u, F_l, I):
@@ -73,20 +79,20 @@ def A_FF(A_J, J_u, J_l, F_u, F_l, I):
     return (2*F_l + 1)*(2*F_u + 1) * wigner_6j(J_l, I, F_l, F_u, 1, J_u)**2 * A_J
 
 #@lru_cache
-def pulse_func(t: float, tau_pulse=LASER_PULSE_DUR, f_rep=LASER_REP_FREQ,
-                buncher_cycle_duration=1/BUNCHER_FREQ):
+def pulse_func(t: float, tau_pulse=LASER_PULSE_DUR.to("s").value, f_rep=LASER_REP_FREQ.to("Hz").value,
+                buncher_cycle_duration=1/BUNCHER_FREQ.to("Hz").value):
     """
     A function that mimics a laser pulse of a certain duration
     While satisfying the property that area under the curve for each rectangular pulse is 1
     """
     # separation between each pulse in ns
-    pulse_sep = (1/f_rep).to('s').value
+    pulse_sep = (1/f_rep)#.to('s').value
     # such that height*width = 1
-    height = 1/tau_pulse.to('s').value 
+    height = 1/tau_pulse#.to('s').value 
     # flag whether this time 't' is within the buncher cycle duration, or after
     # (there's no radiation after leaving buncher)
-    t_within_buncher = np.where(t < buncher_cycle_duration.to('s').value, 1, 0)
-    return t_within_buncher * np.where(((t % pulse_sep) < tau_pulse.to('s').value), height, 0)
+    t_within_buncher = np.where(t < buncher_cycle_duration, 1, 0)
+    return t_within_buncher * np.where(((t % pulse_sep) < tau_pulse), height, 0)
 
 #@lru_cache
 def laser_energy_density(omega, omega_L, per_pulse_energy):
@@ -262,7 +268,7 @@ g_u = 2*F_u + 1
 g_l = 2*F_l + 1
 
 # assumed as per Kim et al (2024)
-rate_coefficient = 1E-14 * u.cm**3 / u.s # 
+rate_coefficient = 2E-14 * u.cm**3 / u.s # 
 # P is the pressure (in DT or buncher, wherever you want to use this)
 inelastic_collision_rate = lambda P: (rate_coefficient * P/(k_B * T)).to("1/s")
 
@@ -354,7 +360,7 @@ def calc_populations(omega_L, energy_per_pulse, arrival_time_gs):
 
     # and NOW we're done!
     print("Successfully integrated rate equations for", NUM_PULSES, "laser pulses at wavenum",
-          (omega_L/u.cycle).to("1/cm", equivalencies=u.spectral()))
+          (omega_L/u.cycle).to("1/cm", equivalencies=u.spectral()), "for pulse energy", energy_per_pulse)
     
     t = np.array(t_array)
     return t, rho_array
@@ -409,28 +415,84 @@ def plot_populations(t, rho_array):
     plt.scatter(t*1E6, np.zeros_like(t), alpha=0.1)
     #plt.scatter(rho.t_events[0]/1e12*1e6, np.zeros_like(rho.t_events[0]), marker='x')
     #plt.xlim(-4e8, 4e-8)
-    plt.show()
     plt.savefig('three_level_solution.png', dpi=300)
+    plt.show()
 
 
-ARRIVAL_TIME_GS = 350 * u.us # microseconds
-wavenum_range = np.linspace(28501.5, 28504.5, 80) / u.cm
+def plot_spectra(energies, wavenums, ms_all):
+    fig, ax = plt.subplots()
+    plateau = np.max(ms_all)
+
+    #alphas= np.linspace(0.6, 0.8, len(energies))
+    colors = mpl.colormaps['cividis'](np.linspace(0, 1.0, len(energies)))
+    #print("The plateau occured at", plateau)
+    #print("Length of energies", len(energies))
+    for i in range(len(energies)):
+        #print("Was this hit?")
+        ax.plot(wavenums, ms_all[i,:], c=colors[i], lw=1., alpha=0.8,
+                label=f"{energies[i].to('nJ').value*1E9:.1e}" + r" $\times 10^{-9}$ nJ/pulse")
+    ax.axhline(y=plateau, xmin=0, xmax=1, ls='--', c='dimgray', lw=1.)
+
+    ax.text(x=28501.52, y=plateau*1.03,
+            s='Plateau due to collisional de-excitation',
+            c='k',
+            ha='left',
+            # va='top', ha='right'
+        )
+    ax.fill_between(wavenums.to('1/cm').value, plateau*1.02, plateau*0.98, fc='silver', alpha=0.3, zorder=-1)
+    # some characteristics
+    ax.set_title(
+        # the He-Lu^+ inelastic collision rate coefficient (at 300K)
+        r"$\alpha_{31}=$" + f'{rate_coefficient.to("cm3 / s").value:.1e}' +" cm$^{3}/$s"
+        + ",\quad" # 
+        + "$p(\mathrm{DT})=" + f"{p_DT.to('mbar').value:.1f}" + "$ mbar")
+    # Shrink current axis's height by 10% on the bottom
+    #box = ax.get_position()
+    #ax.set_position([box.x0, box.y0 + box.height * 0.1,
+    #                box.width, box.height * 0.9])
+    #ax.legend(bbox_to_anchor=(0.05, -0.1), loc="upper left", ncol=3)
+    ax.set_ylim(top=plateau*1.1)
+    ax.set_xlabel("Wavenumber [cm$^{-1}$]")
+    ax.set_ylabel("Metastable Fraction")
+    plt.tight_layout()
+    plt.savefig("theoretical_spectra_5mbar.png", dpi=300)
+    plt.show()
+
+ARRIVAL_TIME_GS = 450 * u.us # microseconds
+wavenum_range = np.linspace(28501.5, 28504.5, 10) / u.cm
 omega_laser = lambda wavenum: wavenum.to('Hz', equivalencies=u.spectral()) * u.cycle
 #omega_L = OMEGA_12 #- (15E9 * u.cycle * u.Hz)
 
-energies = ENERGY_PER_PULSE*np.logspace(-4, 0, 5)
+energies = ENERGY_PER_PULSE*np.logspace(-4, -1.5, 6)
 ms_final = []
 rho_all = []
-t_all = []
-for per_pulse_energy in energies:
+#t_all = []
+
+grid = [(E, omega_L) for E in energies for omega_L in omega_laser(wavenum_range)]
+
+t_i = time.time()
+
+def calc_metastable_pop(energy_per_pulse, omega_L):
+    t, rho_array = calc_populations(omega_L, energy_per_pulse, ARRIVAL_TIME_GS)
+    return rho_array[-1, 2]
+
+with ProcessingPool(num_cores) as pool:
+    calc_results = pool.map(lambda grid_pars: calc_metastable_pop(*grid_pars), grid)
+
+metastable_pop = np.array(calc_results).reshape((len(energies), len(wavenum_range)))
+
+'''for per_pulse_energy in energies:
     ms_this_wavenum = []
     for omega_L in omega_laser(wavenum_range):
         t, rho_array = calc_populations(omega_L, per_pulse_energy, ARRIVAL_TIME_GS)
         ms_this_wavenum.append(rho_array[-1, 2])
     ms_final.append(ms_this_wavenum)
-    rho_all.append(rho_array)
+    rho_all.append(rho_array)'''
+    #t_all.append(t)
     #plot_populations(t, rho_array)
-ms_final = np.array(ms_final)
-fig, ax = plt.subplots()
-ax.plot(wavenum_range, ms_this_wavenum)
-plt.show()
+
+print("Everything took", time.time() - t_i, "seconds")
+#t_all = np.array(t_all)
+ms_final = metastable_pop#np.array(ms_final)
+
+plot_spectra(energies, wavenum_range, ms_final)
