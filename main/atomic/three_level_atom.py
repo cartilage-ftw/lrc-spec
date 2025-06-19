@@ -2,6 +2,7 @@ from astropy.constants import c, hbar, k_B, m_p
 from scipy.integrate import quad, solve_ivp
 from scipy.special import voigt_profile
 from functools import lru_cache
+import scipy.special
 from sympy.physics.wigner import wigner_6j
 from pathos.multiprocessing import ProcessingPool
 
@@ -68,7 +69,7 @@ A31 = 1E-2 #/ u.s # NOTE: this is random value
 p_buncher = 2.5E-2 * u.mbar
 p_DT = 5 * u.mbar
 
-@lru_cache
+@lru_cache(maxsize=None)
 def A_FF(A_J, J_u, J_l, F_u, F_l, I):
     """
     The Einstein A_21 coefficient for a hyperfine transition from F' -> F
@@ -78,7 +79,7 @@ def A_FF(A_J, J_u, J_l, F_u, F_l, I):
     #TODO: double check the prefactors.
     return (2*F_l + 1)*(2*F_u + 1) * wigner_6j(J_l, I, F_l, F_u, 1, J_u)**2 * A_J
 
-#@lru_cache
+@lru_cache(maxsize=None)
 def pulse_func(t: float, tau_pulse=LASER_PULSE_DUR.to("s").value, f_rep=LASER_REP_FREQ.to("Hz").value,
                 buncher_cycle_duration=1/BUNCHER_FREQ.to("Hz").value):
     """
@@ -94,7 +95,7 @@ def pulse_func(t: float, tau_pulse=LASER_PULSE_DUR.to("s").value, f_rep=LASER_RE
     t_within_buncher = np.where(t < buncher_cycle_duration, 1, 0)
     return t_within_buncher * np.where(((t % pulse_sep) < tau_pulse), height, 0)
 
-#@lru_cache
+@lru_cache(maxsize=None)
 def laser_energy_density(omega, omega_L, per_pulse_energy):
     """
     Centered at laser wavelength (and varies at each point of the laser scan).
@@ -114,7 +115,7 @@ def laser_energy_density(omega, omega_L, per_pulse_energy):
     return integrated_energy_density * np.exp(-(omega - omega_L)**2 / (2*laser_sigma**2))
 
 print("Note: Collisional broadening has been ignored.")
-#@lru_cache
+@lru_cache(maxsize=None)
 def atomic_lineshape(omega, omega_21, collision_rates, sigma_doppler):
     """
     Contains the atomic part only. 
@@ -130,8 +131,9 @@ def atomic_lineshape(omega, omega_21, collision_rates, sigma_doppler):
         sigma_doppler = sigma_doppler.to('Hz', equivalencies=[(u.cy/u.s, u.Hz)]).value
     # NOTE: the collision broadening should include both elastic and inelastic collision rates
     # Here, what I've included is only the inelastic part.
-    gamma = 2*collision_rates
-    #print("Collision rates", collision_rates)
+    # TODO: either estimate the elastic collision rate from interaction potential, or "fit" it
+    gamma = 1e9 # 2*collision_rates
+    #print("Inelastic collision rates", collision_rates)
     #d = # diameter of atoms
     #mean_collision_time = (1/(n_He * d**2))*np.sqrt(M_175/(16*np.pi * k_B *T))
     #gamma = 2/mean_collision_time  
@@ -142,11 +144,11 @@ def atomic_lineshape(omega, omega_21, collision_rates, sigma_doppler):
     #gamma = 1
     #print("evaluating atomic lineshape")
     #sigma_doppler = 100_000_000
-    phi = scipy.stats.norm(loc=omega_21, scale=sigma_doppler)
+    #phi = scipy.stats.norm(loc=omega_21, scale=sigma_doppler)
     #return np.exp(-(omega-omega_21)/(2*(sigma_doppler**2)))
-    return phi.pdf(omega)#.value
+    return scipy.special.voigt_profile(omega-omega_21, sigma_doppler, gamma)#.value
 
-@lru_cache
+@lru_cache(maxsize=None)
 def S_factor(omega_12, omega_L, energy_per_pulse, collision_rates, doppler_sigma):
     """
     The arguments of this method had to be dimensionless to be cache-able
@@ -459,7 +461,7 @@ def plot_spectra(energies, wavenums, ms_all):
     plt.show()
 
 ARRIVAL_TIME_GS = 450 * u.us # microseconds
-wavenum_range = np.linspace(28501.5, 28504.5, 10) / u.cm
+wavenum_range = np.linspace(28501.5, 28504.5, 80) / u.cm
 omega_laser = lambda wavenum: wavenum.to('Hz', equivalencies=u.spectral()) * u.cycle
 #omega_L = OMEGA_12 #- (15E9 * u.cycle * u.Hz)
 
