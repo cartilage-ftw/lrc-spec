@@ -67,7 +67,7 @@ A31 = 1E-2 #/ u.s # NOTE: this is random value
 
 
 p_buncher = 2.5E-2 * u.mbar
-p_DT = 5 * u.mbar
+p_DT = 3 * u.mbar
 
 @lru_cache(maxsize=None)
 def A_FF(A_J, J_u, J_l, F_u, F_l, I):
@@ -146,7 +146,7 @@ def atomic_lineshape(omega, omega_21, collision_rates, sigma_doppler):
     #sigma_doppler = 100_000_000
     #phi = scipy.stats.norm(loc=omega_21, scale=sigma_doppler)
     #return np.exp(-(omega-omega_21)/(2*(sigma_doppler**2)))
-    return scipy.special.voigt_profile(omega-omega_21, sigma_doppler, gamma)#.value
+    return scipy.special.voigt_profile(omega-omega_21, 0., gamma)#.value
 
 @lru_cache(maxsize=None)
 def S_factor(omega_12, omega_L, energy_per_pulse, collision_rates, doppler_sigma):
@@ -288,10 +288,10 @@ def calc_populations(omega_L, energy_per_pulse, arrival_time_gs):
         time_between_pulses = 1/LASER_REP_FREQ.to('Hz').value
         # slice the time into parts with and without the pulse
         t_with_pulse = np.array([
-                            h, t_dur + h,
+                            h, t_dur - h,
                         ]) + n*time_between_pulses
         t_no_pulse =  np.array([
-                            t_dur + h, time_between_pulses + h,
+                            t_dur + h, time_between_pulses - h,
             ]) + n*time_between_pulses
         #max_step_sizes = [1e2, 1e6]
 
@@ -457,10 +457,10 @@ def plot_spectra(energies, wavenums, ms_all):
     ax.set_xlabel("Wavenumber [cm$^{-1}$]")
     ax.set_ylabel("Metastable Fraction")
     plt.tight_layout()
-    plt.savefig("theoretical_spectra_5mbar.png", dpi=300)
+    plt.savefig("theoretical_spectra_{0}mbar.png".format(int(p_DT.to('mbar').value)), dpi=300)
     plt.show()
 
-ARRIVAL_TIME_GS = 450 * u.us # microseconds
+ARRIVAL_TIME_GS = 300 * u.us # microseconds
 wavenum_range = np.linspace(28501.5, 28504.5, 80) / u.cm
 omega_laser = lambda wavenum: wavenum.to('Hz', equivalencies=u.spectral()) * u.cycle
 #omega_L = OMEGA_12 #- (15E9 * u.cycle * u.Hz)
@@ -474,8 +474,10 @@ grid = [(E, omega_L) for E in energies for omega_L in omega_laser(wavenum_range)
 
 t_i = time.time()
 
-def calc_metastable_pop(energy_per_pulse, omega_L):
+def calc_metastable_pop(energy_per_pulse, omega_L, to_plot_population=False):
     t, rho_array = calc_populations(omega_L, energy_per_pulse, ARRIVAL_TIME_GS)
+    if to_plot_population:
+        plot_populations(t, rho_array)
     return rho_array[-1, 2]
 
 with ProcessingPool(num_cores) as pool:
