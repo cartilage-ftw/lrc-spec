@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import plotly.graph_objects as go
 import time, os
 import scipy.stats
 
@@ -9,9 +10,6 @@ import visual_utils
 import line_fitting
 import saturation_curve
 
-from streamlit_bokeh import streamlit_bokeh
-from bokeh.plotting import figure
-from bokeh.models import Span
 from pathlib import Path
 
 st.set_page_config(page_title='LRC Analysis Pipeline', page_icon=':stars:')
@@ -47,9 +45,10 @@ def plot_spectrum_from_file(file):
 
 def plot_spectrum_from_data(spec_data):
     global spec_fig
-    spec_fig = visual_utils.make_spectrum_fig(spec_data)
-    st.write("Rendering spectrum plot.")
-    streamlit_bokeh(spec_fig, key='spectrum_plot')
+    spec_fig = visual_utils.make_spectrum_fig_plotly(spec_data)
+    st.plotly_chart(spec_fig)
+    #st.write("Rendering spectrum plot.")
+    #streamlit_bokeh(spec_fig, key='spectrum_plot')
 
 def g(x, A, mu, sigma):
     return A*np.exp(-(x-mu)**2/(2*sigma**2))
@@ -59,16 +58,8 @@ def display_atd(atd, wavenum_req, wavenum_obs='#TODO'):
     median_wavenum = np.median(step_data['wavenum_obs'])
     weights, bin_edges = np.histogram(step_data['cycle_time']*1E6, bins='fd')
 
-    global fig_atd
-    fig_atd = figure(x_axis_label='Arrival Time [μs]',
-                     y_axis_label='Frequency',
-                     x_range=(100, 700),
-                     y_range=(0, 1.05*np.max(weights)))
-    fig_atd.quad(top=weights, bottom=0, left=bin_edges[:-1], right=bin_edges[1:],
-                 fill_color='skyblue', line_color='white', legend_label=f'{median_wavenum:.2f} cm-1')
-    gs_cutoff_line = Span(location=ms_cut_pos*1E3, dimension='height', line_color='black',
-                          line_width=1)
-     
+    fig_atd = visual_utils.make_atd_fig_plotly(step_data, ms_cut_pos)
+    st.plotly_chart(fig_atd, use_container_width=True)
     # for interactive fit/visualization
     # wanna_fit = st.radio("Display Manual Gaussian Fitter", options=['Yes', 'No'], index=1)
     # if wanna_fit == 'Yes':
@@ -87,9 +78,9 @@ def display_atd(atd, wavenum_req, wavenum_obs='#TODO'):
     #     fig_atd.line(x_grid, y2_grid, line_color='black')
     #     fig_atd.line(x_grid, y_grid, line_color='green')
 
-    fig_atd.renderers.extend([gs_cutoff_line])
+    #fig_atd.renderers.extend([gs_cutoff_line])
     st.write("Rendering ATD plot")
-    streamlit_bokeh(fig_atd, key='atd_plot', use_container_width=True)
+    #streamlit_bokeh(fig_atd, key='atd_plot', use_container_width=True)
 
 
 
@@ -207,13 +198,29 @@ def print_fit_results(fit_results):
             st.write(f"""Line {i} has $\Gamma=${float(gamma)*30:.2f} $\pm$ GHz""")
             st.write(f""" and FWHM {float(fwhm*30):.2f} GHz""")
             #st.write(result.fit_report())
-            spec_fig.line(x_finer, result.eval(x=x_finer), color='royalblue', line_width=2.0)
+            #spec_fig.line(x_finer, result.eval(x=x_finer), color='royalblue', line_width=2.0)
+            spec_fig.add_scatter(
+                    x=x_finer,
+                    y=result.eval(x=x_finer),
+                    mode="lines",
+                    name="Voigt fit",
+                    line=dict(width=2),
+                )
             st.write("Rendering plot for fitted results display")
-            streamlit_bokeh(spec_fig)
+            st.plotly_chart(spec_fig, use_container_width=True)
+            #streamlit_bokeh(spec_fig)
     else:
-        spec_fig.line(x_finer, fit_results.eval(x=x_finer), color='royalblue', line_width=2.0)
+        #spec_fig.line(x_finer, fit_results.eval(x=x_finer), color='royalblue', line_width=2.0)
+        spec_fig.add_scatter(
+            x=x_finer,
+            y=fit_results.eval(x=x_finer),
+            mode="lines",
+            name="Voigt fit",
+            line=dict(width=2),
+        )
         st.write("also rendering plot for fitted results display")
-        streamlit_bokeh(spec_fig)
+        st.plotly_chart(spec_fig, use_container_width=True)
+        #streamlit_bokeh(spec_fig)
         for v in ['v1_', 'v2_', 'v3_']:
             gamma = fit_results.params[v + 'gamma']
             st.write(gamma, 'Standard Error:',gamma.stderr)
