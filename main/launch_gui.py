@@ -48,6 +48,7 @@ def plot_spectrum_from_file(file):
 def plot_spectrum_from_data(spec_data):
     global spec_fig
     spec_fig = visual_utils.make_spectrum_fig(spec_data)
+    st.write("Rendering spectrum plot.")
     streamlit_bokeh(spec_fig, key='spectrum_plot')
 
 def g(x, A, mu, sigma):
@@ -87,6 +88,7 @@ def display_atd(atd, wavenum_req, wavenum_obs='#TODO'):
     #     fig_atd.line(x_grid, y_grid, line_color='green')
 
     fig_atd.renderers.extend([gs_cutoff_line])
+    st.write("Rendering ATD plot")
     streamlit_bokeh(fig_atd, key='atd_plot', use_container_width=True)
 
 
@@ -206,9 +208,11 @@ def print_fit_results(fit_results):
             st.write(f""" and FWHM {float(fwhm*30):.2f} GHz""")
             #st.write(result.fit_report())
             spec_fig.line(x_finer, result.eval(x=x_finer), color='royalblue', line_width=2.0)
+            st.write("Rendering plot for fitted results display")
             streamlit_bokeh(spec_fig)
     else:
         spec_fig.line(x_finer, fit_results.eval(x=x_finer), color='royalblue', line_width=2.0)
+        st.write("also rendering plot for fitted results display")
         streamlit_bokeh(spec_fig)
         for v in ['v1_', 'v2_', 'v3_']:
             gamma = fit_results.params[v + 'gamma']

@@ -3,8 +3,8 @@ numpy==1.26.4
 lmfit
 scipy
 plotly>=5.22.0
-bokeh
-streamlit-bokeh
+bokeh>=3.8
+streamlit-bokeh>=3.8
 PyWavelets
 latex
 pathlib
