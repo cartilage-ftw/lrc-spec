@@ -2,12 +2,14 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import time, os
+import scipy.stats
 
 import io_utils
 import visual_utils
 import line_fitting
 import saturation_curve
 
+from streamlit_bokeh import streamlit_bokeh
 from bokeh.plotting import figure
 from bokeh.models import Span
 from pathlib import Path
@@ -46,8 +48,10 @@ def plot_spectrum_from_file(file):
 def plot_spectrum_from_data(spec_data):
     global spec_fig
     spec_fig = visual_utils.make_spectrum_fig(spec_data)
-    st.bokeh_chart(spec_fig)
+    streamlit_bokeh(spec_fig)
 
+def g(x, A, mu, sigma):
+    return A*np.exp(-(x-mu)**2/(2*sigma**2))
 
 def display_atd(atd, wavenum_req, wavenum_obs='#TODO'):
     step_data = atd[atd['wavenum_req'] == wavenum_req]
@@ -61,10 +65,29 @@ def display_atd(atd, wavenum_req, wavenum_obs='#TODO'):
                      y_range=(0, 1.05*np.max(weights)))
     fig_atd.quad(top=weights, bottom=0, left=bin_edges[:-1], right=bin_edges[1:],
                  fill_color='skyblue', line_color='white', legend_label=f'{median_wavenum:.2f} cm-1')
-    gs_cutoff_line = Span(location=ms_cut_pos*1E3, dimension='height', line_color='red',
+    gs_cutoff_line = Span(location=ms_cut_pos*1E3, dimension='height', line_color='black',
                           line_width=1)
+     
+    # for interactive fit/visualization
+    # wanna_fit = st.radio("Display Manual Gaussian Fitter", options=['Yes', 'No'], index=1)
+    # if wanna_fit == 'Yes':
+    #     a1 = st.slider("G1 Amplitude", value=np.max(weights), max_value=5*np.max(weights))
+    #     mu1 = st.slider("G1 Center", value=scipy.stats.mode(bin_edges)[0], max_value=np.max(bin_edges))
+    #     s1 = st.slider("G1 Sigma", value=np.std(weights), max_value = 4*np.std(weights))
+
+    #     a2 = st.slider("G2 Amplitude", value=0.1, max_value=5.*np.max(weights))
+    #     mu2 = st.slider("G2 Center", value=0.1, max_value=np.max(bin_edges))
+    #     s2 = st.slider("G2 Sigma", value=0.1, max_value = 4.*np.std(weights))
+    #     x_grid = np.linspace(100, 700, 1000)
+    #     y1_grid = g(x_grid, a1, mu1, s1)
+    #     y2_grid = g(x_grid, a2, mu2, s2)
+    #     y_grid = y1_grid + y2_grid
+    #     fig_atd.line(x_grid, y1_grid, line_color='black')
+    #     fig_atd.line(x_grid, y2_grid, line_color='black')
+    #     fig_atd.line(x_grid, y_grid, line_color='green')
+
     fig_atd.renderers.extend([gs_cutoff_line])
-    st.bokeh_chart(fig_atd, use_container_width=True)
+    streamlit_bokeh(fig_atd, use_container_width=True)
 
 
 
@@ -179,7 +202,7 @@ def print_fit_results(fit_results):
             st.write(sigma, 'Standard Error:',sigma.stderr)
             st.write(result.params[f'v{i}_' + 'amplitude'], 'Standard Error:',
                       result.params[f'v{i}_'+'amplitude'].stderr)
-            st.write(f"""Line {i} has $\Gamma=${float(gamma)*30:.2f} $\pm$ {float(gamma.stderr)*30:.2f} GHz""")
+            st.write(f"""Line {i} has $\Gamma=${float(gamma)*30:.2f} $\pm$ GHz""")
             st.write(f""" and FWHM {float(fwhm*30):.2f} GHz""")
             #st.write(result.fit_report())
             spec_fig.line(x_finer, result.eval(x=x_finer), color='royalblue', line_width=2.0)
